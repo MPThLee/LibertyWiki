@@ -110,6 +110,30 @@ CI에서 별도 작업으로 `:contract:compatActionTest`, `:contract:compatRest
 - 요구가 충돌하면 기능/원본 API 정밀 호환, AGPL/원본 코드 재사용 금지, API 양계열 동시 제공, 보안/데이터 무결성의 우선순위를 유지합니다.
 - 원본 MediaWiki와 관찰된 동작이 불명확하면 임의 응답을 만들어 구현 완료라고 주장하지 않습니다. `compat_gap`와 검증 대상을 기록합니다.
 
+## 10. 작업 완료 및 커밋 규칙
+
+- 작업 변경과 관련 검증을 마친 뒤, 완료 보고 전에 해당 작업의 변경사항을 반드시 Git 커밋으로 남깁니다. 기존 사용자 변경이나 다른 작업의 변경은 분리하고 이번 작업의 변경만 스테이징합니다.
+- 커밋 메시지의 제목과 본문은 모두 영어로 작성합니다.
+- 제목은 `<type>: <summary>` 형식으로 작업 분류와 구체적인 작업 요약을 적습니다. 분류는 `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`, `build`, `ci`, `revert` 중 변경 목적에 맞게 선택합니다.
+- 본문에는 주요 변경사항과 변경 이유, 검증한 명령 및 결과, 실행하지 못한 검증과 남은 gap을 상세히 기록합니다. 해당하지 않는 항목은 그 이유를 명시합니다.
+- 본문에 `Model: <model name>`을 반드시 포함하여 실제 작업 모델을 기록합니다. 여러 모델이 작업했다면 각 모델과 담당 작업을 적습니다. 모델명은 `Model: GPT-6 (Codex)`처럼 실행 환경에서 확인 가능한 명칭으로 간결하게 적으며, 확인할 수 없는 세부 버전에 대한 부연 설명은 생략합니다.
+- 완료 보고에는 커밋 해시를 포함합니다. 커밋이 실패하면 원인과 미커밋 상태를 보고하고 커밋 완료로 표시하지 않습니다.
+
+예시:
+
+```text
+docs: require completion commits with model attribution
+
+Require agents to commit task changes after validation and before reporting completion.
+Define English commit subjects with a change type and summary, and require
+detailed bodies covering changes, rationale, validation, and remaining gaps.
+
+Validation: git diff --check passed. Runtime tests were not run because only
+agent instructions changed. No compatibility behavior changed.
+
+Model: GPT-6 (Codex)
+```
+
 ## Agent skills
 
 ### Issue tracker
