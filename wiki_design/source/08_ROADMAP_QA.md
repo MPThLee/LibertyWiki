@@ -115,7 +115,7 @@
 
 ## 7. 최종 승인 기준과 인수물
 
-필수 산출물은 PRD, SRS/EXT catalog, architecture decision, logical/physical data schema, API contract, UI IA, security/operations runbook, parser & API compatibility fixtures, migration verification report, requirement-to-test traceability 및 Release Gap List입니다. 현재 패키지는 **기획·설계 초안**으로 테스트 결과와 실제 구현의 검증 보고서는 생성되지 않았습니다.
+저장소의 필수 산출물은 PRD, SRS/EXT catalog, architecture decision, logical/physical data schema, API contract, UI IA, security/operations runbook, parser & API compatibility 테스트 소스/데이터, requirement-to-test traceability 및 이슈트래커입니다. 실행 결과·이관 검증 보고서·시험 로그는 외부 CI artifact 또는 운영 작업 저장소에서 관리하며 Git에 추가하지 않습니다. 현재 패키지는 **기획·설계 초안**입니다.
 
 ## 8. 기준 출처
 
@@ -161,7 +161,7 @@
 ## 13. 미확정 입력과 증거 수집 순서
 
 1. DB 하한(11.8/17/2022/19c)은 승인되었지만 버전·에디션·패치별 실제 지원표는 비어 있습니다. 앱 CPU별 연결/동시성/Unicode/빈 문자열/DDL 재개/복구와 모든 확장의 공통 persistence 계약을 검증합니다. 외부 서비스의 CPU/OS를 앱과 결합하지 않습니다.
-2. `parser_corpus_manifest.json`의 출처·라이선스·버전·해시·설정·기대 출력/메타데이터·실행 모드를 수집하고 대표 위험군을 선정합니다. 원본 실행기·정규화기·훅 구현은 가져오지 않습니다. 원본 기대값을 현재 구현 출력으로 바꿔 통과시키지 않습니다.
+2. 실제 ParserTests 데이터의 출처·라이선스·버전·해시·설정·기대 출력/메타데이터·실행 모드를 수집하고 대표 위험군을 선정합니다. 실제 재현 가능한 fixture와 필요한 출처 정보는 테스트 소스로 관리하며 빈 manifest나 실행 결과 파일은 추가하지 않습니다. 원본 실행기·정규화기·훅 구현은 가져오지 않습니다. 원본 기대값을 현재 구현 출력으로 바꿔 통과시키지 않습니다.
 3. 실제 revision 수·미디어 용량·동시접속·QPS·장비와 템플릿/Lua 자원 분포를 조사합니다. DAU 100으로 동시접속이나 RPS를 추정해 합격 조건을 채우지 않습니다. 최소 사양·예산·총기간은 위험 검증 이후 재산정합니다.
 4. 리브레 위키의 현재 코어/확장 설정·데이터 접근·미디어/삭제 이력 범위는 아직 확인되지 않았습니다. 공개 페이지 직접 조회가 403이었으므로 과거 인덱스 통계를 현재 실행 환경의 증거로 사용하지 않습니다. 실제 이전 리허설 전 권한 있는 일관 스냅샷을 확보하고 source/target 쓰기 authority·전환 후 신규 쓰기 보존/복구를 검증합니다.
-5. 현재 저장소에는 실행 엔진·Gradle wrapper·테스트 태스크가 없습니다. 문서/CSV/JSON/YAML 일관성 검사는 구현·차등시험·부하시험 통과와 구별하며 모든 실행 게이트는 NOT_RUN으로 남깁니다.
+5. 현재 저장소에는 실행 엔진·Gradle wrapper·테스트 태스크가 없습니다. 문서/CSV/JSON/YAML 일관성 검사는 구현·차등시험·부하시험 통과와 구별하며, 검증 결과는 완료 응답·커밋 본문 또는 외부 CI artifact에서 보고합니다. 설계의 게이트 정의에 실제 실행 결과를 누적하지 않습니다.

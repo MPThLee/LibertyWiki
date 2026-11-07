@@ -8,4 +8,4 @@ MediaWiki 1.46.2의 코어·기본 배포 확장·스킨 기능을 독립 구현
 
 LibertyWiki 실행물과 Docker 이미지는 ARM64·x86-64를 지원하도록 개발합니다. 외부 DBMS·OpenSearch·Redis 등 인프라의 실행환경은 프로젝트 실행환경과 독립적이며, 오케스트레이션은 사용자가 선택합니다.
 
-루트의 `mediawiki_equivalent_design_v1_1.*`와 `wiki_design/integrated_*`는 v1.1 통합 산출물입니다. 현재 결정은 `wiki_design/source/`, `wiki_design/specs/`, `docs/adr/`를 따릅니다. 기존 Word 통합본은 이번 설계 변경으로 재생성하지 않았습니다.
+저장소에는 설계문서·계약, 이슈트래커, 소스코드와 필요한 개발 설정만 보관합니다. 검증 결과·실행 로그·중간파일·생성된 통합본은 저장소에 추가하지 않습니다. 현재 결정은 `wiki_design/source/`, `wiki_design/specs/`, `docs/adr/`를 따릅니다.

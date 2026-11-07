@@ -1,0 +1,17 @@
+# Generated reports and intermediate exports are not repository content.
+/wiki_design/quality_report.json
+/wiki_design/specs/design_validation_report.json
+/mediawiki_equivalent_design_v*.md
+/mediawiki_equivalent_design_v*.docx
+/mediawiki_equivalent_design_v*.zip
+/wiki_design/integrated_*.md
+/wiki_design/integrated_*.docx
+
+# Build outputs, caches and runtime artifacts.
+.gradle/
+**/build/
+**/node_modules/
+**/coverage/
+**/test-results/
+/artifacts/
+/tmp/

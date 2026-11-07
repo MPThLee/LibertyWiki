@@ -1,6 +1,5 @@
 {
   "policyVersion": "1.1",
-  "status": "DRAFT_NOT_EXECUTED",
   "apiFamilies": {
     "mediaWikiCompatible": [
       "/w/api.php",
@@ -13,68 +12,55 @@
   "gates": [
     {
       "id": "G-API-INVENTORY",
-      "mandatory": true,
-      "status": "NOT_RUN"
+      "mandatory": true
     },
     {
       "id": "G-COMPAT-CONTRACT",
-      "mandatory": true,
-      "status": "NOT_RUN"
+      "mandatory": true
     },
     {
       "id": "G-NATIVE-CONTRACT",
-      "mandatory": true,
-      "status": "NOT_RUN"
+      "mandatory": true
     },
     {
       "id": "G-STATE-PARITY",
-      "mandatory": true,
-      "status": "NOT_RUN"
+      "mandatory": true
     },
     {
       "id": "G-SEC-PARITY",
-      "mandatory": true,
-      "status": "NOT_RUN"
+      "mandatory": true
     },
     {
       "id": "G-UPGRADE-PARITY",
-      "mandatory": true,
-      "status": "NOT_RUN"
+      "mandatory": true
     },
     {
       "id": "G-EXT-API",
-      "mandatory": true,
-      "status": "NOT_RUN"
+      "mandatory": true
     },
     {
       "id": "G-DBMS-MATRIX",
-      "mandatory": true,
-      "status": "NOT_RUN"
+      "mandatory": true
     },
     {
       "id": "G-APP-CPU-MATRIX",
-      "mandatory": true,
-      "status": "NOT_RUN"
+      "mandatory": true
     },
     {
       "id": "G-STORAGE-MATRIX",
-      "mandatory": true,
-      "status": "NOT_RUN"
+      "mandatory": true
     },
     {
       "id": "G-PARSER-CORPUS",
-      "mandatory": true,
-      "status": "NOT_RUN"
+      "mandatory": true
     },
     {
       "id": "G-RELEASE-1-0",
-      "mandatory": true,
-      "status": "NOT_RUN"
+      "mandatory": true
     },
     {
       "id": "G-RECOVERY",
-      "mandatory": true,
-      "status": "NOT_RUN"
+      "mandatory": true
     }
   ],
   "requirements": {
@@ -102,9 +88,10 @@
   },
   "note": "이 파일은 실행된 테스트 결과가 아닌 CI 릴리스 게이트 설계 예시입니다.",
   "releaseProfile": "release_profile_1_0.json",
-  "parserCorpusManifest": "parser_corpus_manifest.json",
-  "separateApprovals": {
-    "G-ENWIKI": "NOT_RUN",
-    "G-MIGRATION": "NOT_RUN"
-  }
+  "documentType": "RELEASE_GATE_SPECIFICATION",
+  "parserCorpusRequirements": "../source/10_COMPATIBILITY.md",
+  "separateApprovalGateIds": [
+    "G-ENWIKI",
+    "G-MIGRATION"
+  ]
 }

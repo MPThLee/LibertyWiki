@@ -1,20 +1,21 @@
 {
   "profileId": "libertywiki-1.0.0",
   "decisionDate": "2026-11-08",
-  "status": "APPROVED_REQUIREMENTS_NOT_IMPLEMENTED",
+  "status": "APPROVED_REQUIREMENTS",
   "compatibilityBaseline": "MediaWiki-1.46.2",
   "workload": {
     "articles": 100000,
     "totalPagesIncludingArticles": 200000,
     "registeredUsers": 10000,
     "dailyActiveUsers": 100,
-    "revisions": null,
-    "mediaObjects": null,
-    "mediaBytes": null,
-    "peakQps": null,
-    "concurrentUsers": null,
-    "hardware": null,
-    "unmeasuredFieldsStatus": "REQUIRED_BEFORE_CAPACITY_VALIDATION"
+    "inputsRequiredBeforeCapacityValidation": [
+      "revisions",
+      "mediaObjects",
+      "mediaBytes",
+      "peakQps",
+      "concurrentUsers",
+      "hardware"
+    ]
   },
   "databasePolicy": {
     "oneEnginePerInstance": true,
@@ -43,7 +44,12 @@
     ],
     "allEnginesRequiredForCoreAndEveryExtension": true,
     "versionsAboveFloorRequireExplicitVerification": true,
-    "certifiedVersionEditionPatchTuples": []
+    "requiredSupportMatrixDimensions": [
+      "version",
+      "edition",
+      "patch",
+      "driver"
+    ]
   },
   "applicationRuntime": {
     "architectures": [
@@ -73,11 +79,6 @@
     "recoveryPointObjectiveSeconds": 3600,
     "recoveryTimeObjectiveSeconds": 14400
   },
-  "separateApprovals": {
-    "productGa": "NOT_RUN",
-    "enwikiCapacityCertification": "NOT_RUN",
-    "librewikiMigration": "NOT_RUN"
-  },
   "migration": {
     "referenceSite": "https://librewiki.net/",
     "allSiteFeaturesAutomaticallyInScope": false,
@@ -88,7 +89,6 @@
     "accountRecoveryRequiresOwnershipVerification": true,
     "revokeSourceSessionsTokensOAuthAndMfaSecrets": true
   },
-  "implementationAndConformanceStatus": "NOT_RUN",
   "requirementScope": {
     "featureCatalog": "feature_catalog.csv",
     "validationCatalog": "validation_requirements.csv",
@@ -97,5 +97,10 @@
       "ENWIKI_CERTIFICATION",
       "OPTIONAL_EXTENSION"
     ]
-  }
+  },
+  "separateApprovalGates": [
+    "productGa",
+    "enwikiCapacityCertification",
+    "librewikiMigration"
+  ]
 }

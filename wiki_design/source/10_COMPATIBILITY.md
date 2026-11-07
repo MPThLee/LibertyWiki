@@ -50,7 +50,7 @@ MediaWiki Compatible 계열과 Native RESTful 계열은 **동일한 기능 수**
 
 ## 8. 코퍼스 고정과 비교 분모
 
-`../specs/parser_corpus_manifest.json`에 코어/번들/Parsoid 데이터 파일별 출처·revision·SHA-256·라이선스·고지·준비 문서·config/options·언어·확장 requirement·모드·비교 규칙을 기록합니다. legacy HTML과 Parsoid integrated/standalone 기대값, 기대 metadata와 manual selser의 편집/원문 결과를 구분합니다. 출력 정규화는 공식 형식과 관찰한 계약을 근거로 독립 구현하며, 권한·링크·분류·의미나 원문 손실을 숨기는 정규화를 허용하지 않습니다.
+실제 코어/번들/Parsoid 테스트 데이터에는 출처·revision·SHA-256·라이선스·고지·준비 문서·config/options·언어·확장 requirement·모드·비교 규칙을 함께 관리합니다. 빈 manifest나 별도 실행 결과 파일은 저장소에 추가하지 않습니다. legacy HTML과 Parsoid integrated/standalone 기대값, 기대 metadata와 manual selser의 편집/원문 결과를 구분합니다. 출력 정규화는 공식 형식과 관찰한 계약을 근거로 독립 구현하며, 권한·링크·분류·의미나 원문 손실을 숨기는 정규화를 허용하지 않습니다.
 
 선택 PoC 위험군의 의미/왕복 시험 100%, 손실 0건과 자원 안전성을 요구합니다. 전체 코퍼스의 모드별 결과와 분모는 별도로 공개합니다. 확장 requirement 누락으로 건너뛴 파일, disabled, known failure, 미지원 또는 NOT_RUN을 PASS로 합산하지 않습니다. API·Lua·편집기·확장 coverage는 자료 인벤토리로 확인하며 ParserTests 통과만으로 전체 제품 호환을 선언하지 않습니다. 현재 자료 인벤토리와 실행 결과는 없습니다.
 

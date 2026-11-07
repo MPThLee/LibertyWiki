@@ -39,3 +39,4 @@
 API 매핑은 `wiki_design/specs/api_operation_registry.csv`,
 Native 계약은 `wiki_design/specs/openapi.yaml`을 참조합니다.
 설계 초안과 검증된 구현·테스트 결과를 구분합니다.
+검증 결과·작업 로그·중간 조사 파일은 저장소에 추가하지 않습니다. 필요한 설계 결론은 설계문서나 ADR에 반영하고, 실행 결과는 완료 응답·커밋 본문 또는 외부 CI artifact에 보고합니다.

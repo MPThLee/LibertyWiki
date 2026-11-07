@@ -94,7 +94,7 @@ flowchart TD
 | G-UPGRADE-PARITY | 향후 원본에 추가된 endpoint가 호환 route와 Native 기능을 같은 버전에 제공 | 릴리스 중단 |
 | G-EXT-API | 기본 번들 및 신규 extension 공개 기능 모두 Native 노출; 원본에 기존 API가 있으면 호환 adapter | 릴리스 중단 |
 
-테스트 리포트는 `compliance/{sourceVersion}/results.json` 형식으로 machine-readable 저장하고 누락 수, 차이 유형, 테스트 구성, 실행시간 및 reference checksum을 기록합니다.
+테스트 리포트는 외부 CI artifact 또는 저장소 밖의 임시 경로에 machine-readable 형식으로 출력하고 누락 수, 차이 유형, 테스트 구성, 실행시간 및 reference checksum을 기록합니다. Git에는 시험 소스·fixture·합격 기준만 보관하고 실행 리포트는 추가하지 않습니다.
 
 ## 6. 설계 범위에 관한 주의
 
