@@ -18,7 +18,7 @@
 3. 파서 fixtures: 표, 링크, 한글·RTL, nested parser functions, magic words, `nowiki`, template recursion, unclosed tags, syntax variants, file captions, Cite/Math/Poem/TemplateStyles/SyntaxHighlight, Lua frame/mw.*.
 4. 편집 fixtures: 원본 Wikitext→DOM→비편집 부분 보존 직렬화 및 변경된 부분만 수정되는 roundtrip; DOM 안정성은 canonicalized DOM semantic tree, src-span/provenance로 비교.
 5. 대형 템플릿 의존성 invalidation, Lua resource budget, cache poison, XSS escape, malicious styles를 검증합니다.
-6. 실제 문서 코퍼스는 원본 라이선스 조건·개인정보·서비스 이용약관을 준수하여 데이터와 도메인 사실로만 활용하고, **원본 MediaWiki 파서 소스 또는 테스트 코드 자체를 복사하지 않습니다**.
+6. 사용자 승인에 따라 기준 코어·번들 확장·Parsoid의 ParserTests **fixture 데이터**를 사용합니다. 출처·라이선스·원래 고지·버전/해시·조건을 보존하며 **원본 파서·테스트 실행기·정규화기·훅 구현 코드는 복사하지 않습니다**. 실제 위키 코퍼스의 콘텐츠 라이선스·개인정보·서비스 약관은 별도로 검토합니다.
 
 ## 4. 차등 시험 프로토콜
 
@@ -37,7 +37,7 @@ MediaWiki Compatible 계열과 Native RESTful 계열은 **동일한 기능 수**
 - MediaWiki 1.46.2 구성의 Action/REST 경로 inventory 전수·매개변수·권한·오류 계약 시험 통과.
 - 활성 기본 배포 확장의 사용자 기능·Wikitext·API 동작 전수 통과.
 - 기능별 Native RESTful 계약 등록률 100%, API 간 state/ACL/audit parity 불일치 0.
-- 기존 위키 데이터의 revision/files 해시 비교를 포함한 마이그레이션 시험 통과.
+- 고정 데이터셋의 revision/files 해시·공개 ID/URL 의미 보존을 포함한 이관 기능 시험 통과. 특정 운영 위키의 실제 전환 승인은 별도 G-MIGRATION이며 그 사이트 전체 기능을 GA 범위로 자동 편입하지 않습니다.
 - 향후 버전 지원 표기는 **그 버전의 API 이중 표면과 위키텍스트를 검증한 뒤**에만 합니다.
 
 ## 7. 참고 문서
@@ -47,3 +47,11 @@ MediaWiki Compatible 계열과 Native RESTful 계열은 **동일한 기능 수**
 - https://www.mediawiki.org/wiki/Parsoid
 - https://www.mediawiki.org/wiki/Manual:Parser_tests
 - https://www.mediawiki.org/wiki/Version_lifecycle
+
+## 8. 코퍼스 고정과 비교 분모
+
+`../specs/parser_corpus_manifest.json`에 코어/번들/Parsoid 데이터 파일별 출처·revision·SHA-256·라이선스·고지·준비 문서·config/options·언어·확장 requirement·모드·비교 규칙을 기록합니다. legacy HTML과 Parsoid integrated/standalone 기대값, 기대 metadata와 manual selser의 편집/원문 결과를 구분합니다. 출력 정규화는 공식 형식과 관찰한 계약을 근거로 독립 구현하며, 권한·링크·분류·의미나 원문 손실을 숨기는 정규화를 허용하지 않습니다.
+
+선택 PoC 위험군의 의미/왕복 시험 100%, 손실 0건과 자원 안전성을 요구합니다. 전체 코퍼스의 모드별 결과와 분모는 별도로 공개합니다. 확장 requirement 누락으로 건너뛴 파일, disabled, known failure, 미지원 또는 NOT_RUN을 PASS로 합산하지 않습니다. API·Lua·편집기·확장 coverage는 자료 인벤토리로 확인하며 ParserTests 통과만으로 전체 제품 호환을 선언하지 않습니다. 현재 자료 인벤토리와 실행 결과는 없습니다.
+
+공식 데이터 형식: https://www.mediawiki.org/wiki/Manual:Parser_tests

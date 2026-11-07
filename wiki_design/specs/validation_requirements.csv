@@ -1,0 +1,30 @@
+requirement_id,type,description,acceptance,source_document,release_scope,status
+INT-SSO-01,INTEGRATION,OIDC/SAML assertion→사용자 세션/그룹,"허가 그룹만 적용, 비상 관리자 경로 존재",source/02_REQUIREMENTS.md,OPTIONAL_EXTENSION,PLANNED
+INT-S3-01,INTEGRATION,객체 업로드/다운로드/버저닝/조건부 요청,DB-객체 정합·재시도·고아 복구,source/02_REQUIREMENTS.md,PRODUCT_1_0,PLANNED
+INT-SEARCH-01,INTEGRATION,문서 변경 이벤트→OpenSearch 색인,재색인 가능·검색 장애 격리,source/02_REQUIREMENTS.md,PRODUCT_1_0,PLANNED
+INT-MAIL-01,INTEGRATION,알림 메시지→SMTP 또는 전송 API,편집 완료와 발송 실패가 독립,source/02_REQUIREMENTS.md,PRODUCT_1_0,PLANNED
+INT-MW-01,INTEGRATION,MediaWiki XML/API/DB read-only export→이관 모델,원본-대상 건수·해시·추적 보고서,source/02_REQUIREMENTS.md,PRODUCT_1_0,PLANNED
+NFR-201,NON_FUNCTIONAL,고정 MediaWiki baseline의 Action/REST API 정상·오류·권한 케이스 100%,자동화 differential contract suite,source/02_REQUIREMENTS.md,PRODUCT_1_0,PLANNED
+NFR-202,NON_FUNCTIONAL,위키텍스트 파서·템플릿·Lua·편집기 직렬화 계약 100%,골든 코퍼스 및 property-based test,source/02_REQUIREMENTS.md,PRODUCT_1_0,PLANNED
+NFR-203,NON_FUNCTIONAL,영어 위키백과급 규모에서 수평 확장 가능,1억 page/20억 revision 규모 합성+실제 데이터 기반 외삽을 분리 검증,source/02_REQUIREMENTS.md,ENWIKI_CERTIFICATION,PLANNED
+NFR-204,NON_FUNCTIONAL,파일 로컬/S3 변경 시 바이트 단위 무손실,"SHA-256, 개수, 버전, 범위 읽기, 요청 로그 대조",source/02_REQUIREMENTS.md,PRODUCT_1_0,PLANNED
+NFR-205,NON_FUNCTIONAL,페이지/파일/검색/캐시에서 공개 정책 우회 0,모든 접근 경로 negative test,source/02_REQUIREMENTS.md,PRODUCT_1_0,PLANNED
+NFR-206,NON_FUNCTIONAL,확장 격리 및 설치·업그레이드·장애 대응,contract/chaos tests,source/02_REQUIREMENTS.md,PRODUCT_1_0,PLANNED
+NFR-207,NON_FUNCTIONAL,주력 JVM을 검증하고 대안 Native/Native-Ktor PoC를 승인해 실시할 때는 동일 시나리오에서 실측,"p50/p95/p99, peak RSS, startup, throughput, tail latency, TCO 기록",source/02_REQUIREMENTS.md,PRODUCT_1_0,PLANNED
+NFR-208,NON_FUNCTIONAL,AGPL·출처·SBOM·종속성 호환성 준수,SPDX 검사 + 법률·보안 검토 기록,source/02_REQUIREMENTS.md,PRODUCT_1_0,PLANNED
+NFR-PERF-001,NON_FUNCTIONAL,캐시 적중 페이지 조회 p95 ≤ 1.0초,대표 부하·QPS·동시접속을 고정한 시험(수치 조사 전),source/07_SECURITY_OPERATIONS.md,PRODUCT_1_0,PLANNED
+NFR-PERF-002,NON_FUNCTIONAL,비캐시 페이지 조회 p95 ≤ 2.0초,"캐시 무효화, 고비용 템플릿 별도 통계",source/07_SECURITY_OPERATIONS.md,PRODUCT_1_0,PLANNED
+NFR-PERF-003,NON_FUNCTIONAL,페이지 revision 저장 p95 ≤ 2.0초,동시 저장·충돌·권한 검증 포함,source/07_SECURITY_OPERATIONS.md,PRODUCT_1_0,PLANNED
+NFR-PERF-004,NON_FUNCTIONAL,검색 API p95 ≤ 1.5초,상위/희귀 쿼리+20만 전체 문서 조합,source/07_SECURITY_OPERATIONS.md,PRODUCT_1_0,PLANNED
+NFR-PERF-005,NON_FUNCTIONAL,검색 반영 지연 p95 ≤ 60초,revision→OpenSearch indexed timestamp,source/07_SECURITY_OPERATIONS.md,PRODUCT_1_0,PLANNED
+NFR-PERF-006,NON_FUNCTIONAL,저장 API 정상 구간 5xx·timeout < 0.3%,관측/부하/장애시험,source/07_SECURITY_OPERATIONS.md,PRODUCT_1_0,PLANNED
+NFR-AVAIL-001,NON_FUNCTIONAL,월 가용성 목표 99.9%,읽기·쓰기 각각 합성 헬스 체크·SLO 계산,source/07_SECURITY_OPERATIONS.md,PRODUCT_1_0,PLANNED
+NFR-DR-001,NON_FUNCTIONAL,RPO ≤ 1시간,PITR + 객체 버전 복원 실험,source/07_SECURITY_OPERATIONS.md,PRODUCT_1_0,PLANNED
+NFR-DR-002,NON_FUNCTIONAL,RTO ≤ 4시간,분리된 검증 환경에서 실제 복구,source/07_SECURITY_OPERATIONS.md,PRODUCT_1_0,PLANNED
+NFR-SEC-001,NON_FUNCTIONAL,"권한 우회 0건, OWASP 주요 위험 대응",SAST/DAST/권한 네거티브 테스트,source/07_SECURITY_OPERATIONS.md,PRODUCT_1_0,PLANNED
+NFR-SEC-002,NON_FUNCTIONAL,공개/비공개 파일 직접 URL 일관성,URL·CDN·객체 경로 접근 검사,source/07_SECURITY_OPERATIONS.md,PRODUCT_1_0,PLANNED
+NFR-SEC-003,NON_FUNCTIONAL,모든 변경 API 인증/인가/CSRF 정책 적용,자동 API 침투 테스트,source/07_SECURITY_OPERATIONS.md,PRODUCT_1_0,PLANNED
+NFR-A11Y-001,NON_FUNCTIONAL,주요 경로 WCAG 2.2 AA,axe + NVDA/VoiceOver 수동 점검,source/07_SECURITY_OPERATIONS.md,PRODUCT_1_0,PLANNED
+NFR-I18N-001,NON_FUNCTIONAL,ko/en/ja + 1개 RTL 언어 UI,날짜/시간/복수형/IME/RTL 테스트,source/07_SECURITY_OPERATIONS.md,PRODUCT_1_0,PLANNED
+NFR-MAINT-001,NON_FUNCTIONAL,1회 배포를 위한 schema 변경 롤백 계획 보유,사전 백업·마이그레이션 리허설,source/07_SECURITY_OPERATIONS.md,PRODUCT_1_0,PLANNED
+NFR-OPS-001,NON_FUNCTIONAL,모든 업무 요청 traceId 추적 가능,로그·트레이스·Outbox 연결 검사,source/07_SECURITY_OPERATIONS.md,PRODUCT_1_0,PLANNED

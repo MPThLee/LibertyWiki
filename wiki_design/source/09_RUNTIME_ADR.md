@@ -21,7 +21,7 @@
 
 ## 3. 권장 기술 결정
 
-**ADR-101: 주력 API/도메인 서버는 Kotlin + Spring Boot JVM**으로 구성합니다. OpenJDK LTS, PostgreSQL JDBC, Redis, 검색 시스템, OpenTelemetry, 백그라운드 워커를 사용하며 확장은 기본적으로 독립 프로세스의 권한 제한 RPC로 격리합니다. 내부 신뢰 모듈의 JVM SPI는 별도 서명/승인/운영정책 하에만 허용합니다.
+**ADR-101: 주력 API/도메인 서버는 Kotlin + Spring Boot JVM**으로 구성합니다. OpenJDK LTS, 네 DBMS의 검증된 JDBC/persistence adapter, Redis, 검색 시스템, OpenTelemetry, 백그라운드 워커를 사용하며 확장은 기본적으로 독립 프로세스의 권한 제한 RPC로 격리합니다. 내부 신뢰 모듈의 JVM SPI는 별도 서명/승인/운영정책 하에만 허용합니다.
 
 **GraalVM Native Image**는 짧은 수명·작은 메모리의 이미지 변환 worker 또는 별도 사이드카 등에 PoC를 실시하되, 운영자가 업그레이드 시 즉시 플러그인을 설치하는 서버 본체에는 우선 적용하지 않습니다. Native Image의 closed-world analysis로 인해 동적 확장과 상충하기 때문입니다.
 
@@ -51,3 +51,7 @@
 - https://www.graalvm.org/faq/
 - https://ktor.io/docs/server-native.html
 - https://www.gnu.org/licenses/agpl-3.0.en.html
+
+## 7. 2026-11-08 실행환경 결정
+
+ADR-101의 Kotlin/Spring Boot JVM 선택은 유지합니다. LibertyWiki 실행물·워커·Docker 이미지는 ARM64/x86-64를 지원하며 양쪽에서 같은 기능과 자원 제한을 검증합니다. DBMS/OpenSearch/Redis 등의 실행환경은 별도 외부 인프라이며 앱 CPU·OS와 일치할 필요가 없습니다. 프로젝트에서 특정 오케스트레이터를 도입하거나 요구하지 않고 사용자가 배포 방식을 선택합니다. 설정·헬스 체크·종료·볼륨 계약과 실제 연결 시험을 제공합니다. [ADR-0203](../../docs/adr/0203-runtime-and-infrastructure-independence.md)을 따릅니다.

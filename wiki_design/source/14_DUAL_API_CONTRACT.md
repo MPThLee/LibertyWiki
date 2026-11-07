@@ -99,3 +99,9 @@ flowchart TD
 ## 6. 설계 범위에 관한 주의
 
 `specs/openapi.yaml`은 **Native RESTful의 대표 endpoint 초안**입니다. 전체 기능을 포괄하지 않으므로 GA 완료로 주장할 수 없습니다. `specs/api_operation_registry.csv`도 초기 기능 매핑 예시이며, 실제 기준 버전의 전수 API 인벤토리 추출·확인은 개발 트랙 T0에서 수행합니다. 본 문서에서 아직 작성되지 않은 모든 API는 **누락이 아닌 구현 예정 요구사항**으로 추적되고, 제품 GA는 전수 검사 통과 전까지 불가능합니다.
+
+## 7. 1.0 교차 검증 범위와 미완성 계약
+
+새 실행환경·DB 정책은 공개 route를 자동 추가하지 않습니다. 모든 기존 operation에 공통 적용되는 실행 조건으로 코어와 모든 확장의 네 DBMS·두 앱 CPU·LOCAL/S3 matrix에서 기능·ACL·state/audit parity를 시험합니다. 이는 외부 서비스의 CPU/OS를 앱에 맞추는 요구가 아닙니다. 각 버전/에디션/패치와 설정은 시험 manifest에 기록합니다.
+
+현재 registry와 OpenAPI는 설계 예시이며 관리 작업의 전수 목록이 아닙니다. 확장 제거/영구 삭제·계정 재설정/복구·토큰 폐기/MFA 재등록 등의 전체 관리 operation 상세화, 원본 API 존재 확인, Native schema/오류/권한/부작용 및 테스트 연결이 남아 있습니다. UI_ONLY·NOT_APPLICABLE은 관찰 근거와 이유가 있을 때만 사용하며 미확인을 대체하지 않습니다.

@@ -6,6 +6,7 @@
 
 1. **독립 구현 / AGPL:** 프로젝트 신규 코드의 라이선스는 `AGPL-3.0-only`입니다. LICENSE·SPDX·소스 제공·SBOM·서드파티 라이선스 검토 없이 배포해서는 안 됩니다.
 2. **MediaWiki 코드 재사용 전면 금지:** MediaWiki 코어, Parsoid, MediaWiki 번들 및 서드파티 확장, 스킨의 PHP/JS/CSS/SQL/테스트 구현 코드를 복사·변환·번역·포팅·링크·내장하지 않습니다. `Copy from upstream`, 소스 붙여넣기 후 AI 코딩, 유사 로직을 문자 그대로 옮기는 작업을 거부합니다. 기능 설명·공개 API 계약·관찰한 동작·데이터 문법만 근거로 독자적으로 구현합니다.
+   사용자 승인에 따라 ParserTests의 fixture 데이터는 출처·버전·해시·라이선스·원래 고지를 확인해 검증 자료로 사용할 수 있습니다. 이 허용은 파서·테스트 실행기·정규화기·훅의 구현 코드 재사용을 허용하지 않습니다. [ADR-0204](docs/adr/0204-parser-test-data-boundary.md)를 따릅니다.
 3. **MediaWiki 기능 호환:** 최초 기준선 `MediaWiki 1.46.2`, 코어와 기본 배포 확장/스킨 기능 및 활성화된 API, Wikitext·템플릿·ParserFunctions·Scribunto Lua·시각 편집 왕복 변환까지 GA 전 검증합니다. 일부 구현을 전체 호환이라고 광고하면 안 됩니다.
 4. **API 계열은 두 개:** `MediaWiki Compatible` = `/w/api.php` + `/w/rest.php/*`, `Native RESTful` = `/api/v1/*`. 기존 MediaWiki REST API가 Native RESTful이라는 주장은 틀립니다. 모든 도메인 기능·확장 기능에는 Native REST operation이 있어야 하며, 기준 MediaWiki에서 원본 API가 있는 경우 정확한 Compat 경로도 제공해야 합니다.
 5. **향후 새 MediaWiki API:** 추가·변경·삭제되는 API를 지원할 때 **같은 기능 변경에서 양 API 계열의 route/문서/계약 테스트/권한/side effect 검증**을 모두 업데이트합니다. 한쪽만 구현한 기능은 `INCOMPLETE`; GA/버전 호환 선언을 금지합니다.
@@ -15,6 +16,10 @@
 9. **관리자가 공개 정책 결정:** 읽기/편집/회원가입/업로드/파일 보기/익명 행위/보호·차단·그룹 권한을 MediaWiki 수준으로 설정할 수 있어야 합니다. 모든 UI/API/storage/search/cache에서 같은 정책을 적용합니다.
 10. **영어 Wikipedia 규모는 목표이지 성능 사실이 아님:** 1억 페이지/20억 revision 설계용 시험 프로파일을 사용하며 실제 측정 전까지 달성했다고 표시하지 않습니다.
 11. **웹만 개발:** 반응형 브라우저 UI를 구현합니다. iOS/Android 네이티브 앱은 범위 밖입니다.
+12. **다중 DB:** 인스턴스마다 MariaDB/PostgreSQL/SQL Server/Oracle 중 하나를 선택하며 코어와 모든 기본 제공·외부 확장이 네 DB를 지원해야 합니다. 개발 기준일 2026-11-08의 하한은 각각 11.8/17/2022/19c이며 미검증 상위 버전을 자동 지원 선언하지 않습니다. [ADR-0201](docs/adr/0201-relational-database-portability.md)을 따릅니다.
+13. **확장 경계:** 기본 배포 확장은 각각 manifest·버전·수명주기를 갖는 LibertyWiki 확장으로 구현하고 외부 확장과 같은 공개 SPI를 사용합니다. LOCAL/S3 저장·서빙은 내장 기능입니다. 확장 제거와 데이터 영구 삭제를 분리합니다.
+14. **실행환경 독립:** LibertyWiki 실행물·이미지는 ARM64/x86-64를 지원합니다. DBMS/OpenSearch/Redis 등 외부 인프라의 CPU·OS·배포 방식은 프로젝트 실행환경과 독립적입니다. 특정 오케스트레이터를 프로젝트에서 도입·요구하지 않으며 사용자가 선택합니다.
+15. **출시와 이전:** 1.0.0은 일반 문서 10만을 포함한 전체 문서 20만·등록 사용자 1만·DAU 100 프로파일로 검증합니다. ENWIKI 인증과 특정 위키 이전 승인은 별도입니다. 리브레 위키의 모든 고유 기능을 구현 범위로 자동 편입하지 않습니다.
 
 ## 1. 읽어야 할 문서 순서
 
@@ -22,7 +27,7 @@
 
 ## 2. 기본 기술 및 코딩 규칙
 
-- 백엔드: Kotlin + Spring Boot **JVM**(정식 지원 LTS JDK) 우선, Gradle Kotlin DSL, PostgreSQL, Redis, OpenSearch, S3-compatible API. GraalVM Native Image는 독립 worker PoC에만 승인 후 도입합니다. Kotlin/Native+Ktor를 본체에 전환할 때는 별도 ADR과 성능·확장 시험이 필요합니다.
+- 백엔드: Kotlin + Spring Boot **JVM**(정식 지원 LTS JDK) 우선, Gradle Kotlin DSL, DB별 persistence adapter(MariaDB/PostgreSQL/SQL Server/Oracle), Redis, OpenSearch, S3-compatible API. GraalVM Native Image는 독립 worker PoC에만 승인 후 도입합니다. Kotlin/Native+Ktor를 본체에 전환할 때는 별도 ADR과 성능·확장 시험이 필요합니다.
 - 프런트엔드: TypeScript, React와 접근성 중심의 반응형 UI. UI는 Native RESTful API를 기본 호출하되 호환 API의 기능도 동일한 도메인에 매핑되어야 합니다.
 - 패키지 경계 예: `domain.*`, `application.*`, `adapter.api.compat.action`, `adapter.api.compat.rest`, `adapter.api.native`, `adapter.persistence`, `adapter.storage.local`, `adapter.storage.s3`, `extension.spi`, `parser.*`.
 - 클래스/메서드 이름은 역할을 드러내고, 외부 DTO는 도메인 엔티티를 그대로 노출하지 않습니다. API 가족 간 response DTO 공유 금지.

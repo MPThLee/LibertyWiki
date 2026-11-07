@@ -1,6 +1,8 @@
-# LibertyWiki — MediaWiki 1.46.2 호환 독립 구현 프로젝트 v1.1
+# LibertyWiki — MediaWiki 1.46.2 호환 독립 구현 프로젝트
 
 **상태:** 설계 기준선(구현·시험 이전) / **작성일:** 2026-11-07 / **언어:** 한국어 / **라이선스:** AGPL-3.0-only(프로젝트 결정) / **범위:** 코어 + 1.46.2 기본 배포 확장 34종·스킨 5종
+
+**승인 결정 반영일:** 2026-11-08. 현재 승인 기준은 이 `source/` 문서, `../specs/` 계약 초안과 [ADR](../../docs/adr/)입니다. v1.1 통합 Markdown·Word와 `quality_report.json`은 기존 산출물이며 최신 설계나 실행 시험 결과가 아닙니다.
 
 ## 단일한 제품 약속
 
@@ -19,6 +21,12 @@ MediaWiki 1.46.2의 코어와 해당 배포판에 동봉되는 기본 확장의 
 | 파일 | LOCAL 및 S3-compatible 저장·서빙을 모두 내장, 인스턴스별 선택·전환·혼합 가능하도록 설계 |
 | 확장 | 서명된 manifest, capability 권한 모델, lifecycle, event/command/render/api hooks, 격리 실행, 버전 호환; 확장 기능도 양계열 API 제공 |
 | 런타임 권고 | Kotlin + Spring Boot JVM(LTS JDK), Native Image는 선택 worker, Kotlin/Native+Ktor는 PoC 후보 |
+| 제품 목적 | 현재 운영 위키의 문법·역사·확장문법을 보존한 자체 엔진 이전. 리브레 위키 전체 기능 복제를 범위로 삼지 않음 |
+| 1.0 검증 규모 | 일반 문서 10만 포함 전체 문서 20만, 등록 사용자 1만, DAU 100. revision·미디어·QPS·장비는 조사·PoC에서 고정 |
+| DB 지원 | MariaDB 11.8 / PostgreSQL 17 / SQL Server 2022 / Oracle 19c를 하한으로 고정, 코어·모든 확장 지원. 실제 버전·에디션·패치 검증 필수 |
+| 배포 경계 | LibertyWiki 실행물·Docker 이미지 ARM64/x86-64. 외부 인프라 실행환경과 독립. 오케스트레이션은 사용자 선택 |
+| 승인 구분 | 1.0 제품 출시 / ENWIKI 규모 인증 / 리브레 위키 실제 이전 승인 별도 |
+| 파서 위험 검증 | 기준 버전의 코어·번들·Parsoid ParserTests 데이터를 고정하고 실행기·엔진은 독립 작성 |
 
 ## 문서 맵
 
@@ -38,9 +46,11 @@ MediaWiki 1.46.2의 코어와 해당 배포판에 동봉되는 기본 확장의 
 | `12_EXTENSION_PLATFORM.md` | 런타임 확장 프레임워크 및 SPI |
 | `13_LICENSE_CLEANROOM.md` | AGPL·클린룸 개발·의존성 정책 |
 | `14_DUAL_API_CONTRACT.md` | **두 API 계열 동시 제공·지속 동기화·버전별 증분 업데이트** |
-| `14_DUAL_API_CONTRACT.md` | **두 API 계열 동시 제공·지속 동기화·버전별 증분 업데이트** |
+| `../../docs/adr/` | 기존 결정을 대체하는 2026-11-08 승인 결정 |
+| `../specs/release_profile_1_0.json` | 1.0 규모·DB·CPU·성능·운영·이전 요구 프로파일(미실행) |
+| `../specs/parser_corpus_manifest.json` | ParserTests 출처·조건·모드·분모 기록 규칙(자료 조사 전) |
 | `../AGENTS.md` | 개발 에이전트용 구속력 있는 작업 규칙 |
-| `../specs/*` | CSV·YAML·SQL 설계 초안 및 테스트 매트릭스 |
+| `../specs/*` | CSV·YAML·SQL 설계 초안 및 테스트 매트릭스. `validation_requirements.csv`는 NFR/INT, `release_scope`는 제품/후속 인증/선택 확장 구분 |
 
 ## 검증·주의
 

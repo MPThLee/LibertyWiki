@@ -157,7 +157,7 @@
 | FR-API-005 | **스킨/테마** / 일반 사용자 | 반응형 테마와 사용자·사이트별 기본 테마 설정을 제공합니다. | 콘텐츠와 CSS/테마를 분리하고 접근성 시험을 통과합니다. | P1 |
 | FR-API-006 | **가젯/사용자 스크립트** / 개발자 | 허용된 UI 슬롯·샌드박스 API에서 스크립트와 UI 기능을 등록합니다. | 스크립트 취약점·무한 로딩·권한 우회 억제. | P2 |
 | FR-API-007 | **웹훅·이벤트 발행** / 개발자 | 문서/파일/관리 이벤트를 Outbox 기반으로 안전하게 전달합니다. | 중복·순서변경·재시도·Dead letter 처리 검증. | P1 |
-| FR-API-008 | **이전/내보내기 API** / 운영자 | MediaWiki XML export, 파일, revision 데이터를 검증 가능한 방식으로 이관합니다. | 중간 실패 이후 이어받기·재실행이 멱등입니다. | P1 |
+| FR-API-008 | **이전/내보내기 API** / 운영자 | MediaWiki XML export, 파일, revision 데이터를 검증 가능한 방식으로 이관합니다. | 중간 실패 이후 이어받기·재실행이 멱등이며 공개 ID/URL 의미·이력·해시가 보존됩니다. | P1 |
 
 ### 국제화/접근성
 
@@ -178,9 +178,9 @@
 | FR-OPS-004 | **설치·업그레이드** / 운영자 | Schema migration과 config 검증, zero/low-downtime 배포를 지원합니다. | 업그레이드 전후 smoke 및 rollback rehearsal 통과. | P1 |
 | FR-OPS-005 | **보존·영구 삭제 정책** / 운영자 | 관리자 승인에 따른 합법적/기술적 데이터 삭제 정책을 제공합니다. | 불변 역사 원칙과 법적 삭제 요구의 우선순위가 명확합니다. | P1 |
 
-## 4. 기능별 공통 계약
+## 3. 기능별 공통 계약
 
-### 3.1 저장 전제 조건
+### 저장 전제 조건
 
 사용자는 살아 있는 세션 또는 유효한 API 토큰을 제시해야 하며, `edit` 권한이 필요합니다. 대상 페이지 제목·이름공간·문서 보호·차단 여부·행위 필터가 모두 만족되어야 합니다. 클라이언트는 편집을 시작한 `baseRevisionId`를 제출합니다. 본문 제한·템플릿 제한·정규화 정책은 인스턴스 설정에서 버전 관리합니다.
 
@@ -188,7 +188,7 @@
 
 **오류 규약:** `PAGE_NOT_FOUND`, `TITLE_CONFLICT`, `EDIT_CONFLICT`, `PERMISSION_DENIED`, `BLOCKED`, `PROTECTED`, `BAD_TOKEN`, `ABUSE_FILTER`, `INVALID_WIKITEXT`, `STORAGE_FAILURE`, `RATE_LIMITED` 등 안정된 오류코드를 사용하며 API 구현 세부는 06 문서에 있습니다.
 
-### 3.2 리비전 불변성 불변식
+### 리비전 불변성 불변식
 
 - 한번 확정된 revision의 원문과 메타데이터는 원칙적으로 수정하지 않습니다. 복원·되돌리기는 새 revision을 만듭니다.
 - `page.current_revision_id`는 같은 page의 revision만 가리켜야 합니다.
@@ -196,7 +196,7 @@
 - 삭제/숨김은 공개 상태와 접근 권한을 변경하며 원본 바이너리·콘텐츠는 보존·파기 정책에 따릅니다.
 - 검색 색인, 캐시, 의존 관계는 재구성 가능한 **파생 상태**입니다.
 
-### 3.3 파일 정합성 불변식
+### 파일 정합성 불변식
 
 - 모든 파일 revision은 불변 `blob sha256`과 객체 저장 경로를 참조합니다.
 - DB 성공 전에 공개 URL을 열지 않으며 객체 저장 성공 후 DB 실패는 orphan cleanup으로 복구합니다.
@@ -204,7 +204,7 @@
 - 객체 저장소의 목록이 비어 있거나 불완전할 때 이를 진실 원본으로 간주하고 DB의 모든 파일을 동기 삭제하는 작업은 금지합니다.
 - 쓰기 보안 정책을 회피하는 공개 CDN·정적 URL을 허용하지 않습니다.
 
-### 3.4 데이터 분류 및 보호
+### 데이터 분류 및 보호
 
 익명·등록 사용자·편집자·검토자·문서 관리자·권한 관리자·운영자·검사관으로 권한을 분리합니다. `read` 차단은 HTML 문서뿐 아니라 API·검색·미리보기·첨부 원본·썸네일·CDN에도 공통 적용합니다. 각 변경은 사용자/대상/시각/결과를 감사 이벤트로 남깁니다.
 
@@ -239,12 +239,14 @@
 | INT-MAIL-01 | 알림 메시지→SMTP 또는 전송 API | rate limit/일시 실패 | 편집 완료와 발송 실패가 독립 |
 | INT-MW-01 | MediaWiki XML/API/DB read-only export→이관 모델 | 중복 ID/문자 인코딩/사용자 정보 부재 | 원본-대상 건수·해시·추적 보고서 |
 
+INT-SSO-01은 기본 번들 밖의 선택 확장 도입 후보이며 1.0 필수 범위에 자동 포함하지 않습니다. INT-S3/SEARCH/MAIL/MW와 NFR의 검증 연결은 `../specs/validation_requirements.csv` 및 traceability를 참조합니다. NFR-203은 후속 ENWIKI 규모 인증에 적용합니다.
+
 ## 6. 버전·확장 추적
 
 본 문서에서 단일 행의 기능은 실제로 여러 endpoint, 관리자 화면 및 예외 케이스를 포함할 수 있습니다. 모든 조합을 구현하는 것은 단순 요구사항 수만으로 계산할 수 없습니다. EXT 명세는 별도 03 문서, API 계약은 별도 06 문서, 구현 테스트/미결은 08 문서에 있습니다.
 
 
-## 3. 추가 구속 요구사항 — 호환성·확장·저장소·규모·라이선스
+## 7. 추가 구속 요구사항 — 호환성·확장·저장소·규모·라이선스
 
 | ID | 요구사항 | 상세 동작/예외 | 합격 기준 | 출시 |
 |---|---|---|---|---|
@@ -257,13 +259,13 @@
 | FR-POLICY-002 | 세밀한 권한 모델 | 기본 그룹, 사용자 정의 그룹, namespace 제한, 보호/차단, temporary accounts/익명 모델, 권한 만료/로그 | 설정에 따른 동일 결과를 UI/Action API/REST API/저장소 게이트웨이에서 확인 | GA 필수 |
 | FR-STORE-001 | 로컬 파일 저장 | 원본·버전·썸네일·검역 파일의 안전한 경로, atomic staging→publish, 비공개 파일 접근 | 메타/파일 atomicity·simultaneous upload·해시·재시작·복구 시험 | P0 설계/GA 검증 |
 | FR-STORE-002 | S3 호환 저장 | endpoint/path-style, TLS, region, credentials, multipart, ETag와 SHA-256 구분, server-side encryption, object version | Garage/MinIO 등 별도 검증 프로파일과 실패 시나리오 통과 | P0 설계/GA 검증 |
-| FR-STORE-003 | 저장소 독립 서빙 | local file streaming/X-Accel-Redirect, S3 streaming/short-lived presign/proxy, range/304/HEAD, public CDN/private no-store | 원본과 썸네일 HTTP 의미론·비공개 접근·range 일치 | GA 필수 |
+| FR-STORE-003 | 저장소 독립 서빙 | local file streaming/X-Accel-Redirect, S3 streaming/private gateway; presign은 권한 회수 계약을 만족하는 용도로 제한, range/304/HEAD, public CDN/private no-store | 원본과 썸네일 HTTP 의미론·비공개 접근·range 일치 | GA 필수 |
 | FR-STORE-004 | 저장소 무중단 이전 | source→target 복사·checksum·read verification·double-read·cutover·rollback·GC; 삭제 전 안전 기간 | 파일/메타 해시 불일치 0, 이전 중 열람/쓰기 정합성, 리허설 통과 | GA 필수 |
 | FR-EXT-001 | 신규 확장 시스템 | manifest, semver, 의존성, enable/disable, 설치/업그레이드, API/파서/특수페이지/이벤트/화면 기여 | hello-world 확장과 권한·장애·롤백 시험 통과 | P0 설계/GA 검증 |
 | FR-EXT-002 | 확장 격리 | capability 보안 모델, sandbox, CPU/RAM/호출/시간 제한, 호환 버전 검사, 서명·승인 | 확장 실패 시 핵심 API 생존, 권한 상승·DB 직접 접근·서명 검증 우회 0 | GA 필수 |
-| FR-EXT-003 | 확장 Wikitext/API 훅 | 파서 등록, 변형, 액션, REST, UI, 작업 큐를 확장으로 등록하고 기존 번들 기능을 동일 SPI로 제공 | 확장 설치/제거 후 동작·호환 계약·리소스 회수 검증 | GA 필수 |
-| FR-SCALE-001 | 영어 위키백과급 용량 | 1억 페이지, 20억 revision을 처리할 데이터·색인·캐시·job architecture; 파일은 개수·총바이트 별도 scaling | 크기/읽기/쓰기/검색/재색인/백업 프로파일별 합격 증거 제출 | GA 규모 등급 인증 |
-| FR-SCALE-002 | 수평 확장/장애 격리 | API stateless, CDN, 다중 cache 계층, search shards, DB partition/replica, hot page protection, idempotent queue | multi-node 부하/rolling deploy/장애복구 동안 무손실 유지 | GA 규모 등급 인증 |
+| FR-EXT-003 | 확장 Wikitext/API 훅 | 파서 등록, 변형, 액션, REST, UI, 작업 큐를 확장으로 등록하고 기존 번들 기능을 동일 SPI로 제공 | 개별 확장 설치/제거·네 DB 지원·공개 SPI·리소스 회수와 설정/데이터/원문 보존 검증; 영구 삭제는 별도 관리 작업 | GA 필수 |
+| FR-SCALE-001 | 영어 위키백과급 용량 | 1억 페이지, 20억 revision을 처리할 데이터·색인·캐시·job architecture; 파일은 개수·총바이트 별도 scaling | 크기/읽기/쓰기/검색/재색인/백업 프로파일별 합격 증거 제출 | 후속 DB별 규모 인증 (1.0 선행 조건 아님) |
+| FR-SCALE-002 | 수평 확장/장애 격리 | API stateless, CDN, 다중 cache 계층, search shards, DB partition/replica, hot page protection, idempotent queue | multi-node 부하/rolling deploy/장애복구 동안 무손실 유지 | 후속 DB별 규모 인증 (1.0 선행 조건 아님) |
 | FR-LIC-001 | AGPL 배포 의무 | LICENSE, source offer, NOTICE, 고지 UI, SBOM, 빌드·배포 스크립트 제공 | 사용자/네트워크 이용자 경로에서 원본 소스 제공 안내 확인, 법률 검토 승인 | GA 필수 |
 | FR-LIC-002 | 클린룸 원칙 | 기존 MediaWiki·기본 번들·스킨·Parsoid의 소스코드 번역·복사·포팅·링킹 금지 | 변경사항 provenance 기록, 금지 코드 검색, 코드 심사 추적성 | 모든 단계 |
 | FR-WEB-001 | 웹 전용 클라이언트 | 데스크톱·모바일에서 동일 도메인 정책과 기능을 갖는 반응형 웹 | 320~1920px 브라우저/스크린리더/키보드 시험; 모바일 앱 없음 | GA 필수 |
@@ -278,10 +280,10 @@
 | NFR-204 | 파일 로컬/S3 변경 시 바이트 단위 무손실 | SHA-256, 개수, 버전, 범위 읽기, 요청 로그 대조 |
 | NFR-205 | 페이지/파일/검색/캐시에서 공개 정책 우회 0 | 모든 접근 경로 negative test |
 | NFR-206 | 확장 격리 및 설치·업그레이드·장애 대응 | contract/chaos tests |
-| NFR-207 | JVM/Native/Native-Ktor 런타임은 동일 시나리오에서 실측 | p50/p95/p99, peak RSS, startup, throughput, tail latency, TCO 기록 |
+| NFR-207 | 주력 JVM을 검증하고 대안 Native/Native-Ktor PoC를 승인해 실시할 때는 동일 시나리오에서 실측 | p50/p95/p99, peak RSS, startup, throughput, tail latency, TCO 기록 |
 | NFR-208 | AGPL·출처·SBOM·종속성 호환성 준수 | SPDX 검사 + 법률·보안 검토 기록 |
 
-## 4. API 이중 표면 — 신규 강제 요구사항
+## 8. API 이중 표면 — 신규 강제 요구사항
 
 여기서 **두 종류의 API**란 MediaWiki Compatible 계열(기존 **Action API+MediaWiki REST API**가 포함됨)과 **Native RESTful** 계열을 뜻합니다. `/w/rest.php`를 Native RESTful로 간주하면 안 됩니다. 아래 요구사항은 기본 코어뿐 아니라 번들 및 신규 확장에 공통 적용합니다.
 
@@ -302,10 +304,26 @@
 
 **동등성 계산:** `M(version) = 해당 기준 구성의 실제 제공 MediaWiki API operation 집합`, `F(version) = 그 operation으로 표현되는 도메인 기능 집합과 신규 플랫폼의 관리·확장 기능 집합`, `N(version) = Native RESTful operation에서 제공하는 기능 집합`. GA 조건: `M`의 동작 호환 누락 0, `F ⊆ N` 충족, 양 API 부작용·인가 불일치 0. 동일 작업에 API 호출이 여러 개 필요한 경우도 기능 커버리지로 계산하지만 각 mapping은 명시해야 합니다.
 
-## 5. 버전 업데이트 시의 필수 추적
+## 9. 버전 업데이트 시의 필수 추적
 
 1. 릴리스 노트·문서·실행 중인 비교 대상(MediaWiki 신규 버전)의 Action/REST API 인벤토리를 차분합니다.
 2. 추가된 operation마다 `sourceVersion`, `originRoute`, `featureId`, `nativeOperationId`, `owner`를 기록합니다.
 3. 공통 도메인 서비스와 두 공개 어댑터를 같은 변경 집합에서 구현합니다.
 4. 호환 API differential test, Native OpenAPI contract test, 두 인터페이스의 side-effect/auth parity test를 전부 통과합니다.
 5. 호환 프로파일·마이그레이션·하위 호환성 문서를 개정하고 점진 배포합니다.
+
+## 10. 2026-11-08 승인된 실행 및 검증 조건
+
+| ID | 요구사항 | 상세 동작/예외 | 합격 기준 | 출시 |
+|---|---|---|---|---|
+| FR-DBMS-001 | 네 DBMS 기능 동등성 | 인스턴스당 MariaDB/PostgreSQL/SQL Server/Oracle 하나 선택; 코어·기본 제공·외부 확장 모두 네 DBMS 지원 | 동일 기능·ACL·상태·감사·동시성·migration/복구 계약의 DB별 시험 | 1.0 필수 |
+| FR-DBMS-002 | 지원 버전 하한 고정 | 2026-11-08 기준 MariaDB 11.8/PostgreSQL 17/SQL Server 2022/Oracle 19c; MariaDB/Oracle은 직전 장기지원 계열 기준 | 버전·에디션·패치별 검증 지원표; 새 major로 하한 자동 변경 또는 미검증 상위 버전 지원 선언 금지 | 1.0 필수 |
+| FR-RUNTIME-001 | 자체 실행물의 두 CPU와 배포 독립성 | ARM64/x86-64 실행물·Docker 이미지 제공; 외부 인프라 실행환경과 독립; 오케스트레이션은 사용자 선택 | 두 앱 CPU의 실제 기능·연결·이미지 시험; 특정 오케스트레이터 없이 실행 계약 검증 | 1.0 필수 |
+| FR-RELEASE-001 | 1.0 프로파일과 승인 분리 | 일반 문서 10만 포함 전체 20만·등록 사용자 1만·DAU 100; ENWIKI 인증·특정 위키 전환 승인 별도 | 장비·revision·미디어·부하를 고정한 승인 p95/가용성/RPO/RTO 검증; 실제 이전은 최대 24시간 쓰기 동결/읽기 유지·URL/이력 보존 별도 리허설 | 1.0 필수 |
+| FR-PARSERDATA-001 | ParserTests 데이터 고정 | 기준 코어·번들·Parsoid fixture 사용 허용; 실행기/훅/정규화기/엔진 구현은 독립 작성 | 출처·라이선스·고지·해시·조건·모드 고정; PoC 선정 위험군 의미/왕복 100%·손실 0·자원 제한; 전체 분모와 skip/disabled 별도 공개 | PoC 및 1.0 필수 |
+
+이 다섯 요구는 새로운 공개 도메인 route를 추가하는 기능이 아니라 기존 모든 도메인/확장 operation과 출시 증거에 공통 적용하는 조건입니다. API 매핑은 기존 operation registry를 사용하며 DB/CPU/배포 조건 자체에 가짜 Compat route를 만들지 않습니다. 계정 이전·확장 제거/영구 삭제 등 기존 도메인 기능의 관리 API 상세화는 FR-API-008/FR-AUTH-*/FR-EXT-*와 함께 추적하며 아직 inventory·계약 상세화 전입니다.
+
+FR-EXT-001~003은 각각 독립 manifest·버전·수명주기·공개 SPI를 갖는 기본 제공 확장과 모든 외부 확장에 적용합니다. 비활성화/제거 후 설정·데이터·원문을 보존하고 시각 편집의 손상을 막으며 영구 삭제는 별도 명시적 관리자 작업으로 검증합니다. FR-API-008의 실제 위키 전환은 계정명·기여·권한 연결을 유지하되 비밀번호 재설정/관리자 소유권 확인을 거칩니다. 기존 세션·봇/API 토큰·OAuth 승인·MFA 비밀값/복구 코드를 폐기하고 재발급·재등록하며 관리자 MFA 등록 전 관리 기능을 허용하지 않습니다.
+
+승인된 수치와 미확정 입력은 `../specs/release_profile_1_0.json`을 참조합니다. 확정된 요구는 구현·시험 통과 상태가 아니며 현재 실행 게이트는 모두 NOT_RUN입니다.

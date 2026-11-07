@@ -33,7 +33,7 @@ flowchart LR
 
 - 모든 공개 파일에 대하여 논리 filename/version/thumbnail path 매핑, `Content-Type`, `Content-Disposition`, `ETag`, `Last-Modified`, `If-None-Match`, `Cache-Control`, 206 Range, stream cancellation을 지원합니다.
 - **LOCAL**: 애플리케이션 MediaGateway 또는 권한 확인 후 reverse-proxy offload(X-Accel-Redirect) 이용. private 파일 direct file server URL 금지.
-- **S3**: private bucket default; MediaGateway stream proxy 또는 서버가 사전 인가 후 짧은 TTL presigned URL을 발행. 공개 CDN 경로는 정책에 따른 public asset에서만 허용합니다.
+- **S3**: private bucket default. 비공개 조회는 MediaGateway에서 매 요청(HEAD/Range 포함) 현재 정책을 검증하고 스트리밍합니다. 직접 presigned URL의 TTL만으로 권한 회수 즉시 적용을 보장하지 않습니다. presign은 검역 업로드나 공개 자산 등 정책을 만족하는 용도로 한정하며 비공개 우회 경로를 만들지 않습니다. 공개 CDN 경로는 정책에 따른 public asset에서만 허용합니다.
 - 캐시 키에는 wiki, 파일 버전, visibility scope, transformer version을 포함하며, 비공개 파일은 공유 CDN 캐시 기본 비활성화합니다.
 - MIME/content sniffing 정책과 SVG/PDF/HTML 실행 위험을 분리하고 원본 실행 가능한 콘텐츠 inline 서빙을 금지하거나 격리 도메인에서 제공합니다.
 
@@ -49,4 +49,4 @@ flowchart LR
 
 ## 7. 요구사항 매핑
 
-`FR-MEDIA-*`, `FR-DUALAPI-008`, `FR-STORAGE-*`, `NFR-SEC-*`; API 매핑은 MediaWiki Compatible `action=upload` 및 파일 관련 조회, Native REST `/api/v1/files/*` 양계열에서 동일한 파일을 반환하는 것으로 검증합니다.
+`FR-FILE-*`, `FR-DUALAPI-008`, `FR-STORE-001~004`, `NFR-SEC-*`; API 매핑은 MediaWiki Compatible `action=upload` 및 파일 관련 조회, Native REST `/api/v1/files/*` 양계열에서 동일한 파일을 반환하는 것으로 검증합니다.

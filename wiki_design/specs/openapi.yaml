@@ -1,4 +1,6 @@
 openapi: 3.1.0
+x-release-validation-profile: ./release_profile_1_0.json
+x-implementation-status: DESIGN_NOT_EXECUTED
 info:
   title: LibertyWiki Native REST API (Draft)
   version: 1.1.0-draft
@@ -45,23 +47,6 @@ paths:
           $ref: '#/components/responses/Conflict'
         '403':
           $ref: '#/components/responses/Forbidden'
-  /pages/{pageId}:
-    get:
-      tags:
-      - Pages
-      summary: 문서 조회
-      operationId: getPage
-      parameters:
-      - $ref: '#/components/parameters/PageId'
-      responses:
-        '200':
-          description: Page
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Page'
-        '404':
-          $ref: '#/components/responses/NotFound'
   /pages/{pageId}/revisions:
     get:
       tags:
@@ -253,7 +238,7 @@ paths:
                     description: Allowed only for authorized temporary storage targets
         '403':
           $ref: '#/components/responses/Forbidden'
-  /api/v1/pages/by-title/{title}:
+  /pages/by-title/{title}:
     get:
       tags:
       - Pages
@@ -278,7 +263,7 @@ paths:
           description: Conflict
         '422': &id005
           description: Unprocessable Entity
-  /api/v1/revisions/{revisionId}:
+  /revisions/{revisionId}:
     get:
       tags:
       - Revisions
@@ -298,7 +283,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/pages/{pageId}/moves:
+  /pages/{pageId}/moves:
     post:
       tags:
       - Pages
@@ -325,7 +310,23 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/pages/{pageId}:
+  /pages/{pageId}:
+    get:
+      tags:
+      - Pages
+      summary: 문서 조회
+      operationId: getPage
+      parameters:
+      - $ref: '#/components/parameters/PageId'
+      responses:
+        '200':
+          description: Page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+        '404':
+          $ref: '#/components/responses/NotFound'
     delete:
       tags:
       - Pages
@@ -345,7 +346,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/pages/{pageId}/restorations:
+  /pages/{pageId}/restorations:
     post:
       tags:
       - Pages
@@ -372,7 +373,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/pages/{pageId}/protection:
+  /pages/{pageId}/protection:
     put:
       tags:
       - Search
@@ -399,7 +400,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/pages/{pageId}/rollbacks:
+  /pages/{pageId}/rollbacks:
     post:
       tags:
       - Revisions
@@ -426,7 +427,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/pages/{pageId}/undos:
+  /pages/{pageId}/undos:
     post:
       tags:
       - Revisions
@@ -453,7 +454,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/watchlist/pages/{pageId}:
+  /watchlist/pages/{pageId}:
     put:
       tags:
       - Watchlist
@@ -499,7 +500,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/recent-changes:
+  /recent-changes:
     get:
       tags:
       - Search
@@ -513,7 +514,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/users/me:
+  /users/me:
     get:
       tags:
       - Users
@@ -527,7 +528,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/users/{userId}/contributions:
+  /users/{userId}/contributions:
     get:
       tags:
       - Users
@@ -547,7 +548,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/files/{fileId}/content:
+  /files/{fileId}/content:
     get:
       tags:
       - Media
@@ -567,7 +568,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/files/{fileId}:
+  /files/{fileId}:
     get:
       tags:
       - Media
@@ -587,7 +588,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/pages/{pageId}/templates:
+  /pages/{pageId}/templates:
     get:
       tags:
       - Parser
@@ -607,7 +608,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/pages/{pageId}/backlinks:
+  /pages/{pageId}/backlinks:
     get:
       tags:
       - Pages
@@ -627,7 +628,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/pages/{pageId}/categories:
+  /pages/{pageId}/categories:
     get:
       tags:
       - Pages
@@ -647,7 +648,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/categories/{categoryId}/members:
+  /categories/{categoryId}/members:
     get:
       tags:
       - Pages
@@ -667,7 +668,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/admin/blocks:
+  /admin/blocks:
     post:
       tags:
       - Admin
@@ -688,7 +689,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/admin/blocks/{blockId}:
+  /admin/blocks/{blockId}:
     delete:
       tags:
       - Admin
@@ -708,7 +709,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/site:
+  /site:
     get:
       tags:
       - Admin
@@ -722,7 +723,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/admin/users/{userId}/groups:
+  /admin/users/{userId}/groups:
     put:
       tags:
       - Admin
@@ -749,7 +750,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/extensions/abuse-filter/tests:
+  /extensions/abuse-filter/tests:
     post:
       tags:
       - Extensions
@@ -770,7 +771,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/extensions/check-user/queries:
+  /extensions/check-user/queries:
     post:
       tags:
       - Extensions
@@ -791,7 +792,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/notifications:
+  /notifications:
     get:
       tags:
       - Extensions
@@ -805,7 +806,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/revisions/{revisionId}/thanks:
+  /revisions/{revisionId}/thanks:
     post:
       tags:
       - Extensions
@@ -832,7 +833,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/render/math:
+  /render/math:
     post:
       tags:
       - Extensions
@@ -853,21 +854,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/admin/storage/backends:
-    get:
-      tags:
-      - Admin
-      summary: CAP-STORAGE-SETTINGS
-      operationId: getStorageBackends
-      responses:
-        '200':
-          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
-        '401': *id001
-        '403': *id002
-        '404': *id003
-        '409': *id004
-        '422': *id005
-  /api/v1/admin/storage/migrations:
+  /admin/storage/migrations:
     post:
       tags:
       - Admin
@@ -888,28 +875,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/admin/extensions:
-    post:
-      tags:
-      - Extensions
-      summary: CAP-EXT-INSTALL
-      operationId: installExtension
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-      responses:
-        '200':
-          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
-        '401': *id001
-        '403': *id002
-        '404': *id003
-        '409': *id004
-        '422': *id005
-  /api/v1/admin/extensions/{extensionId}/disable:
+  /admin/extensions/{extensionId}/disable:
     post:
       tags:
       - Extensions
@@ -936,7 +902,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
-  /api/v1/admin/compatibility/report:
+  /admin/compatibility/report:
     get:
       tags:
       - Admin
@@ -951,6 +917,26 @@ paths:
         '409': *id004
         '422': *id005
   /admin/extensions:
+    post:
+      tags:
+      - Extensions
+      summary: CAP-EXT-INSTALL
+      operationId: installExtension
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
     get:
       tags:
       - Extensions
@@ -965,6 +951,19 @@ paths:
         '409': *id004
         '422': *id005
   /admin/storage/backends:
+    get:
+      tags:
+      - Admin
+      summary: CAP-STORAGE-SETTINGS
+      operationId: getStorageBackends
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
     post:
       tags:
       - Admin
@@ -1020,6 +1019,7 @@ paths:
         '404': *id003
         '409': *id004
         '422': *id005
+
 components:
   parameters:
     PageId:

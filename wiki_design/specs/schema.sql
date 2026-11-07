@@ -1,4 +1,8 @@
--- LibertyWiki / illustrative schema baseline (PostgreSQL 16+)
+-- LibertyWiki / historical PostgreSQL-only illustrative DDL (not the supported-version policy).
+-- ADR-0201 requires MariaDB/PostgreSQL/SQL Server/Oracle adapters and migrations.
+-- PostgreSQL support floor is 17; release_profile_1_0.json defines approved requirements.
+-- JSONB, TIMESTAMPTZ, empty-string semantics, deferred FKs and partial indexes below
+-- are not a portable schema or evidence that any supported DB has been implemented.
 -- NOT a complete production schema. No credentials included.
 CREATE TABLE wiki_instance (
     id UUID PRIMARY KEY,

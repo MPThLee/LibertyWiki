@@ -7,7 +7,7 @@
 | **MediaWiki Compatible** | `/w/api.php`, `/w/rest.php/*` | 기준 MediaWiki의 Action API 및 MediaWiki REST API의 외부 계약: path/params/forms/body/headers/auth/errors/format/continuation/side effect | 새 MediaWiki 버전에서 추가·변경된 API를 프로파일에 추가하고 원본 계약을 재현 |
 | **Native RESTful** | `/api/v1/*` | 신규 플랫폼에 대해 정의한 resource-oriented REST: JSON/OpenAPI, 상태코드, JSON Schema, 독립 pagination/auth 정책 | **기준 버전과 향후 버전의 모든 도메인 기능 및 확장 기능에 별도 Native route 제공** |
 
-`/w/rest.php`는 **MediaWiki Compatible 계열**입니다. `api.php`를 제외하면 된다는 의미가 아닙니다. `/api/v1`은 기존 MediaWiki REST API를 그대로 복제하는 계열이 아니라 새 계약입니다. **세 경로가 두 API 계열을 형성**합니다.
+`/w/rest.php`는 **MediaWiki Compatible 계열**입니다. `api.php`를 제외하면 된다는 의미가 아닙니다. `/api/v1`은 기존 MediaWiki REST API를 그대로 복제하는 계열이 아니라 새 계약입니다. `/w`는 프로파일의 scriptPath 예시이며 실제 이전에서는 기존 `/api.php` 등 원본 URL을 설정/라우팅으로 유지합니다. 원본 route와 설정은 실제 inventory로 검증합니다. **세 경로가 두 API 계열을 형성**합니다.
 
 ## 2. 정책과 동작 정의
 

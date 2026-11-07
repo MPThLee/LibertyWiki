@@ -3,6 +3,9 @@ profileId: mw-1.46.2-reference
 referenceSoftware: MediaWiki
 referenceVersion: 1.46.2
 status: INVENTORY_PENDING
+releaseValidationProfile: libertywiki-1.0.0
+parserCorpusManifest: parser_corpus_manifest.json
+# scriptPath and public legacy ID/URL mapping are profile-specific; investigate the actual source site.
 configuration:
   contentLanguage: ko
   namespaceSetup: baseline-install

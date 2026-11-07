@@ -2,7 +2,7 @@
 
 ## 1. 구현 원칙과 아키텍처 선택
 
-**결정: Kotlin + Spring Boot JVM 기반 모듈형 모놀리스(Modular Monolith)로 시작하고, 렌더링·검색색인·미디어 변환 등 부하/안전성 경계만 독립 워커로 분리합니다.** 이유는 페이지 수정 시 리비전, 권한, 최근 변경, Outbox, 관리 로그 간 원자적 정합성이 필요하기 때문입니다. 모듈마다 명시적인 Kotlin 인터페이스와 DB schema ownership을 사용하며, 다른 모듈 엔터티에 직접 접근하는 것은 제한합니다.
+**결정: Kotlin + Spring Boot JVM 기반 모듈형 모놀리스(Modular Monolith)로 시작하고, 렌더링·검색색인·미디어 변환 등 부하/안전성 경계만 독립 워커로 분리합니다.** 이유는 페이지 수정 시 리비전, 권한, 최근 변경, Outbox, 관리 로그 간 원자적 정합성이 필요하기 때문입니다. 모듈마다 명시적인 Kotlin 인터페이스와 DB schema ownership을 사용하며, 다른 모듈 엔터티에 직접 접근하는 것은 제한합니다. PostgreSQL 전용 ADR-002는 ADR-0201로 대체하며 MariaDB/PostgreSQL/SQL Server/Oracle의 persistence adapter가 같은 도메인 계약을 구현합니다.
 
 프런트는 TypeScript/React 기반 SPA+SSR 혼합 또는 BFF를 사용할 수 있으나, 문서 읽기의 검색 엔진 색인/캐시 친화성을 위해 서버 렌더 가능한 HTML 전달을 우선합니다. 시각 편집은 ProseMirror 계열 AST 기반 확장 편집기를 제안합니다. 이름공간/템플릿은 프런트에서 직접 해석하지 않고 서버의 파서 계약을 사용합니다.
 
@@ -14,7 +14,7 @@ flowchart LR
     BOT[봇 및 외부 시스템] --> API[MediaWiki Compatible Action/REST + Native RESTful]
     WEB --> AP[Wiki Application]
     API --> AP
-    AP --> DB[(PostgreSQL)]
+    AP --> DB[(Selected relational DBMS)]
     AP --> REDIS[(Redis)]
     AP --> OUT[(DB Outbox)]
     AP --> OBJ[(S3-compatible object storage)]
@@ -33,7 +33,7 @@ flowchart LR
 flowchart TB
     proxy[Reverse Proxy / WAF] --> ui[SSR / Static frontend]
     proxy --> app[wiki-api Kotlin/Spring Boot]
-    app --> postgresql[(PostgreSQL)]
+    app --> db[(Selected relational DBMS)]
     app --> redis[(Redis cache)]
     app --> s3[(S3 Garage/MinIO/etc.)]
     app --> worker[wiki-worker]
@@ -44,7 +44,7 @@ flowchart TB
     media --> s3
 ```
 
-단일 노드 소규모 설치는 `app`, `worker`, PostgreSQL, Redis, S3 호환 저장소를 개별 컨테이너로 시작할 수 있습니다. 다중 노드 확장 시 app은 stateless, 공유 세션/캐시·오브젝트 저장소·DB primary를 사용합니다. 컨테이너 수와 성능 수치는 부하시험 후 결정합니다.
+LibertyWiki 서버·워커·기본 확장 실행물과 Docker 이미지는 ARM64/x86-64를 지원합니다. DBMS·Redis·OpenSearch·S3 등 외부 인프라의 CPU·OS·배포 방식은 이 실행환경과 독립적이며 동종 CPU나 동일 호스트를 요구하지 않습니다. LOCAL 선택 시 별도 S3 서비스를 요구하지 않습니다. 프로젝트가 특정 오케스트레이터를 도입·요구하지 않으며 사용자가 배포 방식을 선택합니다. 이미지의 설정·포트·볼륨·헬스 체크·정상 종료 계약을 제공합니다. 다중 노드 확장 시 앱의 stateless·공유 상태 계약은 유지하며 실제 자원과 성능은 실측합니다.
 
 ## 2. 백엔드 bounded contexts
 
@@ -66,6 +66,8 @@ flowchart TB
 
 **서비스 분리 조건:** 개별 컨텍스트의 리소스 격리 수요/배포 속도가 명확히 발생하거나 장기 처리 워커가 핵심 요청을 방해할 때 독립 서비스로 전환합니다. 초기부터 전체 MSA로 분해하지 않습니다.
 
+기본 제공 확장의 기능 구현은 이 표의 코어 서비스에 하드코딩하지 않습니다. ParserFunctions·Scribunto·Cite·DiscussionTools·Echo 등은 각각 공개 SPI를 사용하는 확장이며, 표의 도메인 경계는 공통 계약/권한/persistence capability 또는 확장 소유 서비스를 구분해 상세화합니다. 일반적인 템플릿 전개와 파서/편집기 포트는 코어에 두고 확장별 함수·런타임·렌더 구현은 확장이 등록합니다.
+
 ## 3. 핵심 시퀀스
 
 ### 3.1 문서 저장과 비동기 색인
@@ -74,17 +76,18 @@ flowchart TB
 sequenceDiagram
     participant UI as Browser
     participant C as Page Controller
-    participant A as Authz
+    participant A as ApplicationService / Authz
     participant R as Revision Service
-    participant DB as PostgreSQL
+    participant DB as Selected relational DBMS
     participant O as Outbox Worker
     participant I as Search/Cache
     UI->>C: POST /api/v1/pages/{id}/revisions (baseRevisionId)
-    C->>A: check edit/protect/block/filter
-    A-->>C: allow
-    C->>R: commit new immutable revision
-    R->>DB: BEGIN, lock page
-    DB-->>R: current revision
+    C->>A: submit commit command and principal
+    A->>R: commit through application transaction boundary
+    R->>DB: BEGIN, lock page / validate policy version
+    DB-->>R: current revision and authoritative policy
+    R->>A: authorize edit/protect/block/filter at commit boundary
+    A-->>R: allow or abort transaction
     alt base revision not equal
       R-->>UI: 409 EDIT_CONFLICT
     else valid
@@ -98,7 +101,7 @@ sequenceDiagram
     end
 ```
 
-**중요 결정:** 사용자에게 저장 성공을 반환하는 기준은 PostgreSQL 트랜잭션 커밋입니다. OpenSearch/캐시 장애가 사용자 저장 실패로 전파되어서는 안 됩니다. Outbox 이벤트는 at-least-once이므로 소비자는 eventId와 target revision ID를 기준으로 멱등이어야 합니다.
+**중요 결정:** 사용자에게 저장 성공을 반환하는 기준은 선택한 DBMS의 트랜잭션 커밋입니다. 권한 변경·보호·차단과 쓰기가 경합하면 공통 ApplicationService가 정책 버전/잠금/재검증으로 순서를 확정하고, 이후의 쓰기는 변경된 정책을 적용합니다. 컨트롤러 사전 검사만으로 인가를 완료하지 않습니다. OpenSearch/캐시 장애가 사용자 저장 실패로 전파되어서는 안 됩니다. Outbox 이벤트는 at-least-once이므로 소비자는 eventId와 target revision ID를 기준으로 멱등이어야 합니다.
 
 ### 3.2 미디어 업로드
 
@@ -141,9 +144,9 @@ flowchart LR
 
 ### 4.1 처리 파이프라인
 
-`source Wikitext` → `Tokenizer` → `CST (원본 위치/서식 보존)` → `AST` → `Template expansion / ParserFunctions / Lua` → `Link & Category extractor` → `Sanitized HTML DOM` → `Cache + provenance`. VisualEditor는 편집 DOM을 생성하고 선택적 직렬화 기법으로 문서에 다시 적용합니다.
+`source Wikitext` → `Tokenizer` → `CST (원본 위치/서식 보존)` → `AST` → `Template expansion / registered extension functions and runtimes` → `Link & Category extractor` → `Sanitized HTML DOM` → `Cache + provenance`. VisualEditor는 편집 DOM을 생성하고 선택적 직렬화 기법으로 문서에 다시 적용합니다.
 
-Wikitext에는 완전한 형식 문법만으로 정의하기 어려운 문맥 의존 사례가 있으므로, MediaWiki parser tests를 실제 의미상의 규격으로 사용합니다. 지원하지 않는 태그/확장 문법은 기본적으로 원본 보존용 opaque node로 처리하며 **조용히 삭제하지 않습니다**.
+Wikitext에는 완전한 형식 문법만으로 정의하기 어려운 문맥 의존 사례가 있으므로, 출처·라이선스를 확인한 버전 고정 ParserTests 데이터를 검증 규격으로 사용하고 실행기·정규화기·훅 구현은 독립 작성합니다. 지원하지 않는 태그/확장 문법은 기본적으로 원본 보존용 opaque node로 처리하며 **조용히 삭제하지 않습니다**.
 
 ### 4.2 파서 플러그인 포트
 
@@ -164,7 +167,7 @@ interface ParserFunction {
 }
 ```
 
-호환성 계약에는 시계·타임존·언어·권한·사이트 설정·정규화 규칙·재귀 제한·원본 위치 및 parserVersion이 포함됩니다. 템플릿 결과 캐시는 `(template revision ID, parameters hash, parserVersion, siteConfigVersion)`를 키로 사용합니다.
+호환성 계약에는 시계·타임존·언어·권한·사이트 설정·정규화 규칙·재귀 제한·원본 위치 및 parserVersion이 포함됩니다. 템플릿 캐시는 template/module 의존 revision과 인자 외에도 호출 페이지/제목·언어·권한/visibility 범위·사이트 설정·파서 버전·시각 의존성을 포함한 검증된 문맥 fingerprint를 사용합니다. 시각이나 의존성이 고정되지 않은 결과는 캐시하지 않거나 적절한 만료·무효화 계약을 적용합니다. 서로 다른 문서의 PAGENAME 결과, 권한 변경, 중첩 템플릿 변경이 충돌하지 않도록 시험합니다.
 
 ### 4.3 파서의 안전 제한 (초기 제안)
 
@@ -204,7 +207,7 @@ migrations: []
 | ADR | 결정 | 근거 | 기각한 대안/유보 사항 |
 |---|---|---|---|
 | ADR-001 | 코어는 모듈형 모놀리스 | 리비전·권한·outbox 원자성 및 초기 비용 | 전체 MSA는 초기 결합 비용 큼 |
-| ADR-002 | PostgreSQL을 진실 원본으로 | ACID·JSONB·PITR 지원 | MediaWiki 기존 SQL 스키마 직접 재현 불필요 |
+| ADR-002 | PostgreSQL 단독 선택은 ADR-0201로 대체 | 네 DBMS의 동일 트랜잭션·인가·데이터 의미 검증 | 기존 SQL 스키마 직접 재현 불필요 |
 | ADR-003 | S3-compatible Object Storage | 이미지·첨부 파일의 파일시스템 종속 탈피 | 단일 로컬 디스크만 의존하지 않음 |
 | ADR-004 | 불변 리비전 + ContentBlob + Slot | MediaWiki MCR 대응/감사 추적 | 문서 현재 본문 덮어쓰기 거부 |
 | ADR-005 | Parser AST + raw/CST 보존 | 편집 왕복 시 원문 손실 위험 완화 | HTML을 유일한 저장 형식으로 쓰지 않음 |
@@ -232,7 +235,7 @@ repository/
       notification/
       extension/
       migration/
-    adapters/            # PostgreSQL, Redis, S3, OpenSearch, mail
+    adapters/            # selected DB adapters, Redis, S3, OpenSearch, mail
   frontend/
     apps/web/
     packages/editor/
@@ -244,8 +247,8 @@ repository/
     mediawiki-import-fixtures/
   docs/
   infra/
-    compose/
-    manifests/
+    image-contracts/    # 설정·포트·볼륨·헬스 체크·종료 계약
+    validation/         # 외부 서비스 연결 및 실행물 검증
   specs/
     openapi.yaml
     schema.sql
@@ -254,7 +257,7 @@ repository/
 ## 8. 기술 검증 계획
 
 1. MediaWiki 릴리스 버전이 고정된 테스트용 wiki와 테스트 데이터셋을 생성합니다.
-2. ParserTests에서 일반 문법, 템플릿, ParserFunctions, 확장 태그의 예상 결과를 추출합니다.
+2. 기준 1.46.2의 코어·번들·Parsoid ParserTests 데이터와 실행 조건·기대 출력 변형·모드를 manifest에 고정합니다. 출처·라이선스·고지를 검토하고 테스트 실행기는 독립 작성합니다.
 3. 파서 결과 비교는 단순 HTML 문자열이 아니라 정규화 DOM + 링크 대상 + 분류 + 에러 비교로 수행합니다.
 4. 시각 편집과 원본 편집을 교차 수행한 후 문서 의미 및 원문 보존 여부를 확인합니다.
 5. 대용량 템플릿/이미지 변경 이벤트 후 큐 회복 시간, 재시도, 장애 격리를 측정합니다.
@@ -278,10 +281,10 @@ flowchart TB
   G --> MEDIA[Media Streaming Gateway]
   MW --> CORE[Kotlin Spring Boot JVM Core Modules]
   NATIVE --> CORE
-  CORE --> COMP[Wikitext Parser + Lua VM + DOM Serializer]
+  CORE --> COMP[Wikitext Parser + DOM Serializer + Extension SPI]
   CORE --> EXT[Extension Registry + Permission/Hook Contract]
   EXT --> WKR[Isolated signed extension worker / Wasm optional]
-  CORE --> DB[(Partitioned PostgreSQL + replicas)]
+  CORE --> DB[(Selected relational DBMS + verified capacity profile)]
   CORE --> REDIS[(Redis multi tier cache)]
   CORE --> EVT[(Outbox + durable event stream)]
   EVT --> SEARCH[(Sharded OpenSearch)]
@@ -295,9 +298,9 @@ flowchart TB
 
 **핵심 분리**: 기존 API의 JSON/XML/HTTP 의미론은 compatibility gateway에서 구현하고 내부 Native REST와 바인딩하지 않습니다. 파서/템플릿/Lua 엔진은 Core의 독립 bounded context입니다. 확장관리자는 manifest·hook·권한을 사용하고 스토리지 종류는 단일 StoragePort로 감쌉니다.
 
-**플러그인 실행 모드**: TRUSTED_JVM(서명·운영자 승인·재시작/클래스로더 격리)과 ISOLATED_RPC(별도 프로세스+비밀키/권한 제한)를 구별합니다. Native Image에서 외부 JAR 런타임 hot-load는 기본 전략이 아니므로 API/파서 확장성은 JVM 또는 별도 RPC 호스트에서 제공합니다. 외부 PHP 확장은 로딩하지 않습니다.
+**플러그인 실행 모드**: TRUSTED_JVM(서명·별도 보안 검토·운영자 승인·재시작/클래스로더 격리)과 ISOLATED_RPC(별도 프로세스+비밀키/권한 제한)를 구별합니다. Native Image에서 외부 JAR 런타임 hot-load는 기본 전략이 아니므로 API/파서 확장성은 JVM 또는 별도 RPC 호스트에서 제공합니다. 외부 PHP 확장은 로딩하지 않습니다.
 
-## 12. 영어 위키백과급 scale-out 토폴로지
+## 12. 후속 ENWIKI 규모 인증을 위한 토폴로지
 
 | 계층 | 확장·보호 기법 | 근거/주의 |
 |---|---|---|
@@ -310,7 +313,7 @@ flowchart TB
 | 미디어 | CDN+private gateway, range streaming, derivative queue, local/S3 pluggable backend | 비공개 캐시 유출 방지 |
 | 지표 | p95/p99, cache hit, DB replica lag, outbox backlog, parse cpu, extension cpu, S3 errors | ENWIKI 프로파일 종료 조건과 직접 연결 |
 
-Wikipedia는 한 서버 수준이 아니라 분산 DB·캐시·검색·미디어 서빙·네트워크 운영의 **전체 시스템 규모**입니다. 설계 완료와 성능 입증은 별개이며, 실제 ENWIKI 수준 달성 표시는 부하시험 결과에 의해서만 허용합니다.
+Wikipedia는 한 서버 수준이 아니라 분산 DB·캐시·검색·미디어 서빙·네트워크 운영의 **전체 시스템 규모**입니다. 설계 완료와 성능 입증은 별개이며, 실제 ENWIKI 수준 달성 표시는 DB별 부하시험 결과에 의해서만 허용합니다. 최초 1.0 제품 출시는 RELEASE_1_0 프로파일로 판정하며 ENWIKI와 특정 위키 실제 이전 승인은 별도입니다.
 
 ## 13. v1.0 핵심 ADR
 

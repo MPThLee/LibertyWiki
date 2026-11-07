@@ -1,0 +1,101 @@
+{
+  "profileId": "libertywiki-1.0.0",
+  "decisionDate": "2026-11-08",
+  "status": "APPROVED_REQUIREMENTS_NOT_IMPLEMENTED",
+  "compatibilityBaseline": "MediaWiki-1.46.2",
+  "workload": {
+    "articles": 100000,
+    "totalPagesIncludingArticles": 200000,
+    "registeredUsers": 10000,
+    "dailyActiveUsers": 100,
+    "revisions": null,
+    "mediaObjects": null,
+    "mediaBytes": null,
+    "peakQps": null,
+    "concurrentUsers": null,
+    "hardware": null,
+    "unmeasuredFieldsStatus": "REQUIRED_BEFORE_CAPACITY_VALIDATION"
+  },
+  "databasePolicy": {
+    "oneEnginePerInstance": true,
+    "baselineFrozen": true,
+    "engines": [
+      {
+        "id": "MARIADB",
+        "minimumFamily": "11.8",
+        "floorBasis": "PREVIOUS_LTS"
+      },
+      {
+        "id": "POSTGRESQL",
+        "minimumFamily": "17",
+        "floorBasis": "PREVIOUS_MAJOR"
+      },
+      {
+        "id": "SQL_SERVER",
+        "minimumFamily": "2022",
+        "floorBasis": "PREVIOUS_MAJOR"
+      },
+      {
+        "id": "ORACLE",
+        "minimumFamily": "19c",
+        "floorBasis": "PREVIOUS_LONG_TERM"
+      }
+    ],
+    "allEnginesRequiredForCoreAndEveryExtension": true,
+    "versionsAboveFloorRequireExplicitVerification": true,
+    "certifiedVersionEditionPatchTuples": []
+  },
+  "applicationRuntime": {
+    "architectures": [
+      "arm64",
+      "amd64"
+    ],
+    "dockerImagesRequired": true,
+    "orchestratorSelectedBy": "USER",
+    "projectAdoptsOrRequiresOrchestrator": false,
+    "thirdPartyInfrastructureRuntimeIndependent": true
+  },
+  "storageBackends": [
+    "LOCAL",
+    "S3_COMPATIBLE"
+  ],
+  "responseTargets": {
+    "scope": "SERVER_API_P95",
+    "cachedReadMs": 1000,
+    "uncachedReadMs": 2000,
+    "revisionCommitMs": 2000,
+    "searchMs": 1500,
+    "searchIndexLagMs": 60000
+  },
+  "operationsTargets": {
+    "monthlyAvailability": 0.999,
+    "readAndWriteMeasuredSeparately": true,
+    "recoveryPointObjectiveSeconds": 3600,
+    "recoveryTimeObjectiveSeconds": 14400
+  },
+  "separateApprovals": {
+    "productGa": "NOT_RUN",
+    "enwikiCapacityCertification": "NOT_RUN",
+    "librewikiMigration": "NOT_RUN"
+  },
+  "migration": {
+    "referenceSite": "https://librewiki.net/",
+    "allSiteFeaturesAutomaticallyInScope": false,
+    "maximumWriteFreezeSeconds": 86400,
+    "readsRemainAvailable": true,
+    "preserveLegacyUrlsAndPublicIds": true,
+    "passwordResetRequired": true,
+    "accountRecoveryRequiresOwnershipVerification": true,
+    "revokeSourceSessionsTokensOAuthAndMfaSecrets": true
+  },
+  "implementationAndConformanceStatus": "NOT_RUN",
+  "requirementScope": {
+    "featureCatalog": "feature_catalog.csv",
+    "validationCatalog": "validation_requirements.csv",
+    "productGaReleaseScope": "PRODUCT_1_0",
+    "separateScopes": [
+      "ENWIKI_CERTIFICATION",
+      "OPTIONAL_EXTENSION"
+    ]
+  }
+}
