@@ -109,3 +109,17 @@ CI에서 별도 작업으로 `:contract:compatActionTest`, `:contract:compatRest
 - 작업 완료라고 말하기 전에 **실제로 수정한 파일, 검증한 테스트, 통과하지 못한 테스트, 남은 호환성 gap**을 구체적으로 보고합니다.
 - 요구가 충돌하면 기능/원본 API 정밀 호환, AGPL/원본 코드 재사용 금지, API 양계열 동시 제공, 보안/데이터 무결성의 우선순위를 유지합니다.
 - 원본 MediaWiki와 관찰된 동작이 불명확하면 임의 응답을 만들어 구현 완료라고 주장하지 않습니다. `compat_gap`와 검증 대상을 기록합니다.
+
+## Agent skills
+
+### Issue tracker
+
+이슈·명세는 로컬 Markdown으로 관리합니다. 이슈 조회·생성·갱신 전에 `docs/agents/issue-tracker.md`를 읽습니다.
+
+### Triage labels
+
+기본 5개 triage 역할을 사용합니다. 분류·상태 변경 전에 `docs/agents/triage-labels.md`를 읽습니다.
+
+### Domain docs
+
+단일 컨텍스트(single-context)입니다. 코드베이스 탐색·설계 전에 `docs/agents/domain.md`를 읽습니다.
