@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: AtlasWiki Native REST API (Draft)
+  title: LibertyWiki Native REST API (Draft)
   version: 1.1.0-draft
   description: Native RESTful 공개 API 대표 계약 설계 초안. /w/api.php 및 /w/rest.php/* 는 별도 MediaWiki Compatible API 계열이며 이 문서는 그 전체 계약이
     아님. 신규 MediaWiki API에는 반드시 Native 동등 operation을 추가해야 함. 전체 API 목록 미완료.

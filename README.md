@@ -1,1 +1,1 @@
-# LibreWiki
+# LibertyWiki

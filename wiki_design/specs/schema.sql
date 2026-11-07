@@ -1,4 +1,4 @@
--- AtlasWiki / illustrative schema baseline (PostgreSQL 16+)
+-- LibertyWiki / illustrative schema baseline (PostgreSQL 16+)
 -- NOT a complete production schema. No credentials included.
 CREATE TABLE wiki_instance (
     id UUID PRIMARY KEY,

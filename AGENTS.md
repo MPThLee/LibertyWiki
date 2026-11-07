@@ -1,4 +1,4 @@
-# AGENTS.md — AtlasWiki 독립 구현 개발 에이전트 규약
+# AGENTS.md — LibertyWiki 독립 구현 개발 에이전트 규약
 
 > 적용: 이 저장소의 Kotlin 백엔드, TypeScript 웹 클라이언트, 확장 SDK, 파서, 운영도구, 설계문서 및 API 스키마 전체. 이 문서는 개발 자동화와 리뷰어에게 동일하게 적용됩니다. 최신 승인된 설계가 우선하며 변경은 ADR/PR에서 추적합니다.
 
