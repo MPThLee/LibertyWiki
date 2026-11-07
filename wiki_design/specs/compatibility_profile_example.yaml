@@ -1,0 +1,21 @@
+# 설계 예시입니다. 실제 기준 서버를 조사한 검증된 프로파일이 아닙니다.
+profileId: mw-1.46.2-reference
+referenceSoftware: MediaWiki
+referenceVersion: 1.46.2
+status: INVENTORY_PENDING
+configuration:
+  contentLanguage: ko
+  namespaceSetup: baseline-install
+  bundledExtensions: discover-activated-modules
+  permissions: discover-site-policy
+apiFamilies:
+  mediaWikiCompatible:
+    actionApiRoot: /w/api.php
+    mediaWikiRestRoot: /w/rest.php
+  nativeRestful:
+    root: /api/v1
+requirements:
+  requiredCrossSurfaceParity: true
+  newUpstreamApiRequiresNativeOperation: true
+  allActiveOriginalRoutesMustConform: true
+  unsupportedOperationsBlockGA: true

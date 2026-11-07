@@ -1,0 +1,57 @@
+{
+  "policyVersion": "1.1",
+  "status": "DRAFT_NOT_EXECUTED",
+  "apiFamilies": {
+    "mediaWikiCompatible": [
+      "/w/api.php",
+      "/w/rest.php/*"
+    ],
+    "nativeRestful": [
+      "/api/v1/*"
+    ]
+  },
+  "gates": [
+    {
+      "id": "G-API-INVENTORY",
+      "mandatory": true,
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "G-COMPAT-CONTRACT",
+      "mandatory": true,
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "G-NATIVE-CONTRACT",
+      "mandatory": true,
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "G-STATE-PARITY",
+      "mandatory": true,
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "G-SEC-PARITY",
+      "mandatory": true,
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "G-UPGRADE-PARITY",
+      "mandatory": true,
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "G-EXT-API",
+      "mandatory": true,
+      "status": "NOT_RUN"
+    }
+  ],
+  "requirements": {
+    "baselineVersion": "1.46.2",
+    "futureMediaWikiApiUpdatesMustBeDualSurface": true,
+    "newPlatformExtensionFunctionsMustHaveNativeRest": true,
+    "allCompatRoutesConformToActualBaseline": true
+  },
+  "note": "이 파일은 실행된 테스트 결과가 아닌 CI 릴리스 게이트 설계 예시입니다."
+}

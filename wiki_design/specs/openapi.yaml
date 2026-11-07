@@ -1,0 +1,1175 @@
+openapi: 3.1.0
+info:
+  title: AtlasWiki Native REST API (Draft)
+  version: 1.1.0-draft
+  description: Native RESTful 공개 API 대표 계약 설계 초안. /w/api.php 및 /w/rest.php/* 는 별도 MediaWiki Compatible API 계열이며 이 문서는 그 전체 계약이
+    아님. 신규 MediaWiki API에는 반드시 Native 동등 operation을 추가해야 함. 전체 API 목록 미완료.
+servers:
+- url: https://wiki.example.invalid/api/v1
+  description: Native RESTful API only
+security:
+- bearerAuth: []
+tags:
+- name: Pages
+- name: Revisions
+- name: Search
+- name: Uploads
+- name: Admin
+- name: Extensions
+- name: Users
+- name: Watchlist
+- name: Media
+- name: Site
+- name: Parser
+paths:
+  /pages:
+    post:
+      tags:
+      - Pages
+      summary: 문서 생성
+      operationId: createPage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePageRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /pages/{pageId}:
+    get:
+      tags:
+      - Pages
+      summary: 문서 조회
+      operationId: getPage
+      parameters:
+      - $ref: '#/components/parameters/PageId'
+      responses:
+        '200':
+          description: Page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /pages/{pageId}/revisions:
+    get:
+      tags:
+      - Revisions
+      operationId: getRevisions
+      parameters:
+      - $ref: '#/components/parameters/PageId'
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      responses:
+        '200':
+          description: Revision list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Revision'
+                  nextCursor:
+                    type:
+                    - string
+                    - 'null'
+    post:
+      tags:
+      - Revisions
+      operationId: commitRevision
+      summary: 새 불변 리비전 생성
+      parameters:
+      - $ref: '#/components/parameters/PageId'
+      - name: If-Match
+        in: header
+        required: false
+        description: baseRevisionId를 대신하는 ETag; 둘 중 최소 하나 제출
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevisionRequest'
+      responses:
+        '201':
+          description: Revision created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Revision'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Invalid'
+  /parse:
+    post:
+      tags:
+      - Pages
+      operationId: parseWikitext
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - source
+              properties:
+                source:
+                  type: string
+                  maxLength: 3000000
+                title:
+                  type: string
+                namespaceId:
+                  type: integer
+      responses:
+        '200':
+          description: Sanitized HTML and parser diagnostics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  html:
+                    type: string
+                  diagnostics:
+                    type: array
+                    items:
+                      type: object
+  /search:
+    get:
+      tags:
+      - Search
+      operationId: search
+      parameters:
+      - name: q
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      - name: namespaceId
+        in: query
+        required: false
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: Query results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /files/uploads:
+    post:
+      tags:
+      - Uploads
+      operationId: beginUpload
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - name
+              - byteSize
+              - sha256
+              - mimeType
+              properties:
+                name:
+                  type: string
+                byteSize:
+                  type: integer
+                  minimum: 1
+                sha256:
+                  type: string
+                  pattern: ^[A-Fa-f0-9]{64}$
+                mimeType:
+                  type: string
+      responses:
+        '201':
+          description: Upload session
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - uploadId
+                - state
+                properties:
+                  uploadId:
+                    type: string
+                    format: uuid
+                  state:
+                    type: string
+                    enum:
+                    - PENDING
+                  uploadUrl:
+                    type: string
+                    format: uri
+                    description: Allowed only for authorized temporary storage targets
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/v1/pages/by-title/{title}:
+    get:
+      tags:
+      - Pages
+      summary: CAP-PAGE-READ-TITLE
+      operationId: getPageByTitle
+      parameters:
+      - name: title
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': &id001
+          description: Unauthorized
+        '403': &id002
+          description: Forbidden
+        '404': &id003
+          description: Not Found
+        '409': &id004
+          description: Conflict
+        '422': &id005
+          description: Unprocessable Entity
+  /api/v1/revisions/{revisionId}:
+    get:
+      tags:
+      - Revisions
+      summary: CAP-REVISION-READ
+      operationId: getRevision
+      parameters:
+      - name: revisionId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/pages/{pageId}/moves:
+    post:
+      tags:
+      - Pages
+      summary: CAP-PAGE-MOVE
+      operationId: movePage
+      parameters:
+      - name: pageId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/pages/{pageId}:
+    delete:
+      tags:
+      - Pages
+      summary: CAP-PAGE-DELETE
+      operationId: deletePage
+      parameters:
+      - name: pageId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/pages/{pageId}/restorations:
+    post:
+      tags:
+      - Pages
+      summary: CAP-PAGE-UNDELETE
+      operationId: restorePage
+      parameters:
+      - name: pageId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/pages/{pageId}/protection:
+    put:
+      tags:
+      - Search
+      summary: CAP-PAGE-PROTECT
+      operationId: setPageProtection
+      parameters:
+      - name: pageId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/pages/{pageId}/rollbacks:
+    post:
+      tags:
+      - Revisions
+      summary: CAP-REVISION-ROLLBACK
+      operationId: rollbackRevision
+      parameters:
+      - name: pageId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/pages/{pageId}/undos:
+    post:
+      tags:
+      - Revisions
+      summary: CAP-REVISION-UNDO
+      operationId: undoRevision
+      parameters:
+      - name: pageId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/watchlist/pages/{pageId}:
+    put:
+      tags:
+      - Watchlist
+      summary: CAP-WATCH
+      operationId: watchPage
+      parameters:
+      - name: pageId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+    delete:
+      tags:
+      - Watchlist
+      summary: CAP-WATCH-REMOVE
+      operationId: unwatchPage
+      parameters:
+      - name: pageId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/recent-changes:
+    get:
+      tags:
+      - Search
+      summary: CAP-RECENTCHANGES
+      operationId: getRecentChanges
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/users/me:
+    get:
+      tags:
+      - Users
+      summary: CAP-USER-INFO
+      operationId: getCurrentUser
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/users/{userId}/contributions:
+    get:
+      tags:
+      - Users
+      summary: CAP-USER-CONTRIB
+      operationId: getUserContributions
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/files/{fileId}/content:
+    get:
+      tags:
+      - Media
+      summary: CAP-FILE-CONTENT
+      operationId: getFileContent
+      parameters:
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/files/{fileId}:
+    get:
+      tags:
+      - Media
+      summary: CAP-FILE-INFO
+      operationId: getFileInfo
+      parameters:
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/pages/{pageId}/templates:
+    get:
+      tags:
+      - Parser
+      summary: CAP-TEMPLATE-QUERY
+      operationId: getUsedTemplates
+      parameters:
+      - name: pageId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/pages/{pageId}/backlinks:
+    get:
+      tags:
+      - Pages
+      summary: CAP-BACKLINKS
+      operationId: getBacklinks
+      parameters:
+      - name: pageId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/pages/{pageId}/categories:
+    get:
+      tags:
+      - Pages
+      summary: CAP-CATEGORIES
+      operationId: getCategories
+      parameters:
+      - name: pageId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/categories/{categoryId}/members:
+    get:
+      tags:
+      - Pages
+      summary: CAP-CATEGORY-MEMBERS
+      operationId: getCategoryMembers
+      parameters:
+      - name: categoryId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/admin/blocks:
+    post:
+      tags:
+      - Admin
+      summary: CAP-BLOCK
+      operationId: createBlock
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '201':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/admin/blocks/{blockId}:
+    delete:
+      tags:
+      - Admin
+      summary: CAP-UNBLOCK
+      operationId: removeBlock
+      parameters:
+      - name: blockId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/site:
+    get:
+      tags:
+      - Admin
+      summary: CAP-SITEINFO
+      operationId: getSiteInfo
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/admin/users/{userId}/groups:
+    put:
+      tags:
+      - Admin
+      summary: CAP-USER-RIGHTS
+      operationId: setUserGroups
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/extensions/abuse-filter/tests:
+    post:
+      tags:
+      - Extensions
+      summary: CAP-EXT-ABUSEFILTER-TEST
+      operationId: testAbuseFilter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/extensions/check-user/queries:
+    post:
+      tags:
+      - Extensions
+      summary: CAP-EXT-CHECKUSER-QUERY
+      operationId: queryCheckUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/notifications:
+    get:
+      tags:
+      - Extensions
+      summary: CAP-EXT-ECHO-READ
+      operationId: getNotifications
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/revisions/{revisionId}/thanks:
+    post:
+      tags:
+      - Extensions
+      summary: CAP-EXT-THANKS
+      operationId: sendThanks
+      parameters:
+      - name: revisionId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/render/math:
+    post:
+      tags:
+      - Extensions
+      summary: CAP-EXT-MATH
+      operationId: renderMath
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/admin/storage/backends:
+    get:
+      tags:
+      - Admin
+      summary: CAP-STORAGE-SETTINGS
+      operationId: getStorageBackends
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/admin/storage/migrations:
+    post:
+      tags:
+      - Admin
+      summary: CAP-STORAGE-MIGRATION
+      operationId: createStorageMigration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '201':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/admin/extensions:
+    post:
+      tags:
+      - Extensions
+      summary: CAP-EXT-INSTALL
+      operationId: installExtension
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/admin/extensions/{extensionId}/disable:
+    post:
+      tags:
+      - Extensions
+      summary: CAP-EXT-DISABLE
+      operationId: disableExtension
+      parameters:
+      - name: extensionId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /api/v1/admin/compatibility/report:
+    get:
+      tags:
+      - Admin
+      summary: CAP-COMPAT-REPORT
+      operationId: getCompatibilityReport
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /admin/extensions:
+    get:
+      tags:
+      - Extensions
+      summary: 확장 목록
+      operationId: listExtensions
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /admin/storage/backends:
+    post:
+      tags:
+      - Admin
+      summary: 스토리지 백엔드 추가
+      operationId: registerStorageBackend
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /admin/storage/migrations/{migrationId}:
+    get:
+      tags:
+      - Admin
+      summary: 스토리지 이전 작업 조회
+      operationId: getStorageMigration
+      parameters:
+      - name: migrationId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+  /health:
+    get:
+      tags:
+      - Site
+      summary: 상태 점검
+      operationId: getHealth
+      security: []
+      responses:
+        '200':
+          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
+        '401': *id001
+        '403': *id002
+        '404': *id003
+        '409': *id004
+        '422': *id005
+components:
+  parameters:
+    PageId:
+      name: pageId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    Page:
+      type: object
+      required:
+      - id
+      - namespaceId
+      - normalizedTitle
+      - currentRevisionId
+      - status
+      properties:
+        id:
+          type: string
+          format: uuid
+        namespaceId:
+          type: integer
+        normalizedTitle:
+          type: string
+        currentRevisionId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - DELETED
+          - SUPPRESSED
+        redirectTarget:
+          type:
+          - string
+          - 'null'
+    Revision:
+      type: object
+      required:
+      - id
+      - pageId
+      - sourceSha256
+      - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        pageId:
+          type: string
+          format: uuid
+        parentRevisionId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        sourceSha256:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        summary:
+          type: string
+    CreatePageRequest:
+      type: object
+      required:
+      - title
+      - namespaceId
+      - source
+      properties:
+        title:
+          type: string
+          minLength: 1
+        namespaceId:
+          type: integer
+        source:
+          type: string
+        summary:
+          type: string
+    RevisionRequest:
+      type: object
+      required:
+      - source
+      properties:
+        source:
+          type: string
+        baseRevisionId:
+          type: string
+          format: uuid
+        summary:
+          type: string
+          maxLength: 500
+        minorEdit:
+          type: boolean
+          default: false
+    Error:
+      type: object
+      required:
+      - code
+      - message
+      - requestId
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        requestId:
+          type: string
+        details:
+          type: object
+  responses:
+    Conflict:
+      description: Conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: Access denied
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Invalid:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unavailable:
+      description: Dependent service unavailable
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+x-api-families:
+  mediaWikiCompatible:
+    actionApi: /w/api.php
+    mediaWikiRestApi: /w/rest.php/*
+  nativeRestful: /api/v1/*
+x-release-policy: 모든 신규 MediaWiki 버전의 API/기능 업데이트 시 MediaWiki Compatible과 Native RESTful을 동시 구현·테스트.

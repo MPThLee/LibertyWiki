@@ -1,0 +1,133 @@
+﻿requirement_id,source_scope,feature,module,priority,acceptance,test_case_id,status
+FR-SITE-001,Core,위키 초기 설정,SiteConfig,P0,설정 변경 기록과 즉시 적용/재시작 필요 항목이 구분됩니다.,TC-SITE-001,PLANNED
+FR-SITE-002,Core,특수 페이지 목록,SiteConfig,P1,권한 없는 페이지 링크는 실행 시 403을 반환합니다.,TC-SITE-002,PLANNED
+FR-SITE-003,Core,위키 통계,SiteConfig,P1,정해진 집계 시점과 최신화 시각이 표시됩니다.,TC-SITE-003,PLANNED
+FR-SITE-004,Core,사이트 메시지·푸터,SiteConfig,P1,관리 권한이 없는 사용자는 메시지 수정이 불가능합니다.,TC-SITE-004,PLANNED
+FR-SITE-005,Core,읽기 전용·점검 모드,SiteConfig,P0,API까지 동일하게 쓰기 금지가 적용됩니다.,TC-SITE-005,PLANNED
+FR-PAGE-001,Core,문서 생성,Page,P0,동시 중복 생성 시 한 요청만 성공합니다.,TC-PAGE-001,PLANNED
+FR-PAGE-002,Core,문서 조회,Page,P0,없는 페이지는 존재하지 않음 상태로 표시합니다.,TC-PAGE-002,PLANNED
+FR-PAGE-003,Core,문서 이동·이름 변경,Page,P0,이전 제목에 redirect가 만들어지고 대상 충돌은 거부됩니다.,TC-PAGE-003,PLANNED
+FR-PAGE-004,Core,문서 삭제·복원,Page,P0,삭제/복원 전후 이력 불변 및 관리자 로그 생성.,TC-PAGE-004,PLANNED
+FR-PAGE-005,Core,문서 보호,Page,P0,만료 전/후에 권한 검사가 정확히 변경됩니다.,TC-PAGE-005,PLANNED
+FR-PAGE-006,Core,문서 정보,Page,P0,내용 접근 권한 없는 사용자에게 비공개 메타가 노출되지 않습니다.,TC-PAGE-006,PLANNED
+FR-PAGE-007,Core,하위 문서,Page,P1,하위 문서 허용 여부에 따라 정상적으로 분기됩니다.,TC-PAGE-007,PLANNED
+FR-PAGE-008,Core,문서 퍼머링크,Page,P0,새 편집 이후에도 동일 리비전을 재현합니다.,TC-PAGE-008,PLANNED
+FR-PAGE-009,Core,문서 대량 작업,Page,P1,부분 실패 항목과 재시도 가능한 결과를 제공합니다.,TC-PAGE-009,PLANNED
+FR-PAGE-010,Core,문서 내보내기,Page,P1,export→import 후 수·내용·원본 출처가 비교 가능합니다.,TC-PAGE-010,PLANNED
+FR-NS-001,Core,기본 이름공간,Namespace,P0,대표 기본 제목을 올바른 namespace ID로 해석합니다.,TC-NS-001,PLANNED
+FR-NS-002,Core,사용자 정의 이름공간,Namespace,P1,예약 ID·동일 별칭 충돌을 거부합니다.,TC-NS-002,PLANNED
+FR-NS-003,Core,제목 정규화,Namespace,P0,대표 충돌·Unicode 테스트 집합을 통과합니다.,TC-NS-003,PLANNED
+FR-EDIT-001,Core,소스 편집,Revision,P0,"저장 성공 시 revision 추가, 직전 revision 유지.",TC-EDIT-001,PLANNED
+FR-EDIT-002,Core,편집 충돌 방지,Revision,P0,동시에 같은 문서를 편집하면 무의식적 덮어쓰기가 없습니다.,TC-EDIT-002,PLANNED
+FR-EDIT-003,Core,편집 검증,Revision,P0,실패 시 어떠한 새 revision도 생성하지 않습니다.,TC-EDIT-003,PLANNED
+FR-EDIT-004,Core,리비전 이력,Revision,P0,시간 역순 이력 및 페이지네이션이 정확합니다.,TC-EDIT-004,PLANNED
+FR-EDIT-005,Core,리비전 차이,Revision,P0,삭제/삽입·한글·표·템플릿 예제가 구분 표시됩니다.,TC-EDIT-005,PLANNED
+FR-EDIT-006,Core,되돌리기·취소,Revision,P0,원래 revision을 삭제하지 않고 새 revision이 추가됩니다.,TC-EDIT-006,PLANNED
+FR-EDIT-007,Core,리비전 비공개 처리,Revision,P1,권한 없는 목록/API/검색/캐시에서 숨김 요소가 불가시합니다.,TC-EDIT-007,PLANNED
+FR-EDIT-008,Core,다중 콘텐츠 슬롯,Revision,P1,slot별 독립 content ID/hash와 렌더 정책이 유지됩니다.,TC-EDIT-008,PLANNED
+FR-EDIT-009,Core,자동저장·임시 초안,Revision,P1,새로고침 후 미저장 변경 복구를 사용자가 선택합니다.,TC-EDIT-009,PLANNED
+FR-EDIT-010,Core,편집 태그,Revision,P1,태그별 필터 및 이력 조회가 일치합니다.,TC-EDIT-010,PLANNED
+FR-EDIT-011,Core,시각편집기,Revision,P1,정의된 round-trip fixtures에서 의미·토큰 보존 검증 통과.,TC-EDIT-011,PLANNED
+FR-PARSE-001,Core,Wikitext 기본 파서,Parser,P0,승인된 parser golden tests를 통과합니다.,TC-PARSE-001,PLANNED
+FR-PARSE-002,Core,미리보기/렌더링,Parser,P0,동일 입력에서 일관된 의미와 서버 XSS 차단.,TC-PARSE-002,PLANNED
+FR-PARSE-003,Core,템플릿 포함,Parser,P0,중첩·순환·재귀 제한에 대해 종료를 보장합니다.,TC-PARSE-003,PLANNED
+FR-PARSE-004,Core,파서 함수,Parser,P1,각 함수 정상·오류·중첩 fixtures 통과.,TC-PARSE-004,PLANNED
+FR-PARSE-005,Core,매직 워드,Parser,P1,환경 정보·시간대별 예상 값이 정확합니다.,TC-PARSE-005,PLANNED
+FR-PARSE-006,Core,Parser AST/의존 그래프,Parser,P0,템플릿 수정 시 참조 페이지 무효화 작업이 생성됩니다.,TC-PARSE-006,PLANNED
+FR-PARSE-007,Core,왕복 변환/부분 직렬화,Parser,P1,선택적 직렬화 테스트에서 미수정 토큰의 손실이 없습니다.,TC-PARSE-007,PLANNED
+FR-PARSE-008,Core,Lua 모듈 호출,Parser,P1,CPU/메모리/실행시간 제한과 DB/네트워크 접근 금지.,TC-PARSE-008,PLANNED
+FR-LINK-001,Core,내부 링크,LinkGraph,P0,붉은 링크·정상 링크·앵커를 구분합니다.,TC-LINK-001,PLANNED
+FR-LINK-002,Core,역링크·링크된 문서,LinkGraph,P0,페이지 이동·삭제·복구 후 색인 정합성이 유지됩니다.,TC-LINK-002,PLANNED
+FR-LINK-003,Core,리다이렉트,LinkGraph,P0,순환 링크 및 과도한 연속 이동을 탐지합니다.,TC-LINK-003,PLANNED
+FR-LINK-004,Core,카테고리 분류,LinkGraph,P0,카테고리의 역방향 멤버 조회가 가능합니다.,TC-LINK-004,PLANNED
+FR-LINK-005,Core,인터위키/언어 링크,LinkGraph,P1,허용되지 않은 prefix/스킴을 차단합니다.,TC-LINK-005,PLANNED
+FR-LINK-006,Core,사용 문서 찾기,LinkGraph,P1,템플릿 사용 문서가 실제 렌더 의존 그래프와 일치합니다.,TC-LINK-006,PLANNED
+FR-SEARCH-001,Core,기본 통합 검색,Search,P0,신규 페이지 검색 가능·공개 범위 검사.,TC-SEARCH-001,PLANNED
+FR-SEARCH-002,Core,고급 검색,Search,P1,쿼리 파서 유효성 검사 및 과도한 결과 제한.,TC-SEARCH-002,PLANNED
+FR-SEARCH-003,Core,비동기 색인,Search,P0,"일반 상황 검색 반영 60초 이내(제안), 장애 재시도.",TC-SEARCH-003,PLANNED
+FR-SEARCH-004,Core,목록·특수 조회,Search,P1,특수 페이지 내 필터·정렬·페이지네이션 동작.,TC-SEARCH-004,PLANNED
+FR-SEARCH-005,Core,검색 장애 격리,Search,P0,검색 장애 주입 시 문서 읽기·저장이 성공합니다.,TC-SEARCH-005,PLANNED
+FR-AUTH-001,Core,회원 가입·로그인,Identity,P0,계정 확인 및 인증 오류가 안전하게 처리됩니다.,TC-AUTH-001,PLANNED
+FR-AUTH-002,Core,사용자 그룹·권한,Identity,P0,허가되지 않은 delete/protect/userrights 등 403.,TC-AUTH-002,PLANNED
+FR-AUTH-003,Core,차단·해제,Identity,P0,차단 중 수정·업로드·이동이 허가 정책에 따라 거부됩니다.,TC-AUTH-003,PLANNED
+FR-AUTH-004,Core,사용자 기여,Identity,P0,사용자별 편집·로그 이력과 일치합니다.,TC-AUTH-004,PLANNED
+FR-AUTH-005,Core,사용자 환경설정,Identity,P1,개인 설정 변경이 다른 사용자에게 영향을 주지 않습니다.,TC-AUTH-005,PLANNED
+FR-AUTH-006,Core,자동확인 사용자,Identity,P1,시계 경계·조건 변경·수동 역할 정책을 검증합니다.,TC-AUTH-006,PLANNED
+FR-AUTH-007,Core,인증 외부 연동,Identity,P1,IdP 장애·계정 중복·권한 축소 시나리오 통과.,TC-AUTH-007,PLANNED
+FR-AUTH-008,Core,Bot·API 계정,Identity,P1,토큰 폐기 후 API 호출이 즉시 거부됩니다.,TC-AUTH-008,PLANNED
+FR-AUTH-009,Core,사용자 이름 변경,Identity,P1,변경 후 과거 기여의 참조가 끊기지 않습니다.,TC-AUTH-009,PLANNED
+FR-AUTH-010,Core,관리 특권 변경,Identity,P0,권한 상승 시도에 네거티브 테스트 통과.,TC-AUTH-010,PLANNED
+FR-TALK-001,Core,토론 문서,Activity,P0,원문서와 토론 간 이동이 가능합니다.,TC-TALK-001,PLANNED
+FR-TALK-002,Core,토론 주제·답글,Activity,P1,중첩·충돌·완료 댓글의 저장 결과가 정확합니다.,TC-TALK-002,PLANNED
+FR-WATCH-001,Core,주시문서,Activity,P0,다른 사용자에게 내 감시 목록이 노출되지 않습니다.,TC-WATCH-001,PLANNED
+FR-WATCH-002,Core,최근 변경,Activity,P0,편집 직후 최근 변경에 원자적·비동기 일치 규칙대로 반영.,TC-WATCH-002,PLANNED
+FR-WATCH-003,Core,알림,Activity,P1,알림 대상·읽음 상태·접근 권한을 유지합니다.,TC-WATCH-003,PLANNED
+FR-WATCH-004,Core,이메일 알림,Activity,P1,발송 장애는 편집 저장 성공에 영향을 주지 않습니다.,TC-WATCH-004,PLANNED
+FR-WATCH-005,Core,순찰(Patrol),Activity,P1,검토 행위의 작성자/시각이 별도 기록됩니다.,TC-WATCH-005,PLANNED
+FR-FILE-001,Core,파일 업로드,File,P0,트랜잭션 실패 시 정리 큐가 고아 객체를 처리합니다.,TC-FILE-001,PLANNED
+FR-FILE-002,Core,파일 이름·중복 처리,File,P0,동일 이름 업로드가 이력 보존 정책대로 동작합니다.,TC-FILE-002,PLANNED
+FR-FILE-003,Core,파일 설명 문서,File,P0,파일/설명 본문 수정 이력이 독립적으로 유지됩니다.,TC-FILE-003,PLANNED
+FR-FILE-004,Core,파일 버전·복구,File,P1,복구 이후 SHA-256과 파일 URL이 확인됩니다.,TC-FILE-004,PLANNED
+FR-FILE-005,Core,이미지 썸네일,File,P0,원본 변조 없이 파생 이미지 생성과 캐시 만료.,TC-FILE-005,PLANNED
+FR-FILE-006,Core,PDF·동영상 썸네일,File,P1,실패 시 원본 다운로드로 폴백하고 오류를 기록합니다.,TC-FILE-006,PLANNED
+FR-FILE-007,Core,비공개 다운로드,File,P0,직접 S3 URL 접근·캐시·서명 만료 후 열람이 차단됩니다.,TC-FILE-007,PLANNED
+FR-FILE-008,Core,삭제 파일 보관,File,P1,권한자가 과거 파일을 복원할 수 있습니다.,TC-FILE-008,PLANNED
+FR-ADMIN-001,Core,관리 로그,Security,P0,작성자/대상/시각/결과/사유 검색 가능합니다.,TC-ADMIN-001,PLANNED
+FR-ADMIN-002,Core,대량 반달행위 복구,Security,P1,대상 범위를 미리보기하고 매 작업의 성공/실패가 기록됩니다.,TC-ADMIN-002,PLANNED
+FR-ADMIN-003,Core,편집 행위 필터,Security,P1,오탐·규칙 시간 초과·로그 비공개 정책 테스트.,TC-ADMIN-003,PLANNED
+FR-ADMIN-004,Core,CAPTCHA·남용 방지,Security,P1,자동화 정책 예외와 접근성 대체 경로가 정의됩니다.,TC-ADMIN-004,PLANNED
+FR-ADMIN-005,Core,로그인 보안 경보,Security,P1,계정별 보안 알림 설정과 기록이 일치합니다.,TC-ADMIN-005,PLANNED
+FR-ADMIN-006,Core,차단 목록,Security,P1,규칙 우선순위·정규식 시간 제한이 검증됩니다.,TC-ADMIN-006,PLANNED
+FR-ADMIN-007,Core,2단계 인증,Security,P1,"복구 코드 일회성, TOTP 재사용 방지 통과.",TC-ADMIN-007,PLANNED
+FR-ADMIN-008,Core,특권 검사관 기능,Security,P2,"민감정보 노출 제한, 별도 권한·보존기간 검증.",TC-ADMIN-008,PLANNED
+FR-API-001,Core,네이티브 REST API,API,P0,OpenAPI 스키마 검증 및 입력 오류를 구조화합니다.,TC-API-001,PLANNED
+FR-API-002,Core,MediaWiki Action API 어댑터,API,P1,동일 fixture에 필드·상태·오류 의미 일치.,TC-API-002,PLANNED
+FR-API-003,Core,API 인증·쿼터,API,P0,권한·만료·초과 요청에서 표준 오류 반환.,TC-API-003,PLANNED
+FR-API-004,Core,확장 등록 시스템,API,P1,호환 버전 미달 플러그인을 실행하지 않습니다.,TC-API-004,PLANNED
+FR-API-005,Core,스킨/테마,API,P1,콘텐츠와 CSS/테마를 분리하고 접근성 시험을 통과합니다.,TC-API-005,PLANNED
+FR-API-006,Core,가젯/사용자 스크립트,API,P2,스크립트 취약점·무한 로딩·권한 우회 억제.,TC-API-006,PLANNED
+FR-API-007,Core,웹훅·이벤트 발행,API,P1,중복·순서변경·재시도·Dead letter 처리 검증.,TC-API-007,PLANNED
+FR-API-008,Core,이전/내보내기 API,API,P1,중간 실패 이후 이어받기·재실행이 멱등입니다.,TC-API-008,PLANNED
+FR-I18N-001,Core,언어·지역화,Frontend,P0,누락 메시지 fallback과 IME 입력이 정상입니다.,TC-I18N-001,PLANNED
+FR-I18N-002,Core,언어별 이름공간,Frontend,P1,상호 다른 locale에서 동일 페이지를 조회할 수 있습니다.,TC-I18N-002,PLANNED
+FR-A11Y-001,Core,키보드·보조기기,Frontend,P0,WCAG 2.2 AA 핵심 경로를 수동/자동 점검 통과.,TC-A11Y-001,PLANNED
+FR-A11Y-002,Core,모바일 반응형,Frontend,P0,360px/768px/1440px 화면에서 기능 접근 가능.,TC-A11Y-002,PLANNED
+FR-OPS-001,Core,백업/복구,Operations,P0,복구 시 페이지/리비전 수와 파일 해시 일치.,TC-OPS-001,PLANNED
+FR-OPS-002,Core,업무 큐와 재시도,Operations,P0,재시도·멱등키·DLQ 및 상태 가시성 확인.,TC-OPS-002,PLANNED
+FR-OPS-003,Core,모니터링·감사 추적,Operations,P0,저장 실패 원인이 상관 ID로 추적됩니다.,TC-OPS-003,PLANNED
+FR-OPS-004,Core,설치·업그레이드,Operations,P1,업그레이드 전후 smoke 및 rollback rehearsal 통과.,TC-OPS-004,PLANNED
+FR-OPS-005,Core,보존·영구 삭제 정책,Operations,P1,불변 역사 원칙과 법적 삭제 요구의 우선순위가 명확합니다.,TC-OPS-005,PLANNED
+EXT-001,Bundled extension 1.46,AbuseFilter,AbuseFilter,P1,"경고/차단/태그, 오탐, 시간 초과, 규칙 비공개 테스트",TC-EXT-001,PLANNED
+EXT-002,Bundled extension 1.46,CategoryTree,CategoryTree,P1,상하위·수천 노드 로딩/순환 차단,TC-EXT-002,PLANNED
+EXT-003,Bundled extension 1.46,CheckUser,CheckUser,P2,일반 운영자도 민감정보 무단 열람 불가,TC-EXT-003,PLANNED
+EXT-004,Bundled extension 1.46,Cite,Cite,P1,동일 각주 재사용·중첩·미완성 태그,TC-EXT-004,PLANNED
+EXT-005,Bundled extension 1.46,CiteThisPage,CiteThisPage,P1,인용 문자열에 정확한 영구 링크·수정일 표기,TC-EXT-005,PLANNED
+EXT-006,Bundled extension 1.46,CodeEditor,CodeEditor,P1,키보드/IME/에러 표시 일치,TC-EXT-006,PLANNED
+EXT-007,Bundled extension 1.46,ConfirmEdit,ConfirmEdit,P1,회원가입/대량 외부링크/오답/접근성 대체,TC-EXT-007,PLANNED
+EXT-008,Bundled extension 1.46,DiscussionTools,DiscussionTools,P1,원문 토론과 UI 답글/서명 의미 일치,TC-EXT-008,PLANNED
+EXT-009,Bundled extension 1.46,Echo,Echo,P1,멘션/되돌림/구독 알림/읽음 상태,TC-EXT-009,PLANNED
+EXT-010,Bundled extension 1.46,Gadgets,Gadgets,P2,임의 코드의 권한 상승·XSS 차단,TC-EXT-010,PLANNED
+EXT-011,Bundled extension 1.46,ImageMap,ImageMap,P1,다각형/사각형/원과 모바일 터치 영역,TC-EXT-011,PLANNED
+EXT-012,Bundled extension 1.46,InputBox,InputBox,P1,페이지 생성·검색 이동·입력값 필터,TC-EXT-012,PLANNED
+EXT-013,Bundled extension 1.46,Linter,Linter,P1,구문 오류 위치/심각도/수정 후 갱신,TC-EXT-013,PLANNED
+EXT-014,Bundled extension 1.46,LoginNotify,LoginNotify,P1,오인 통지 억제·계정별 설정,TC-EXT-014,PLANNED
+EXT-015,Bundled extension 1.46,Math,Math,P1,무한 처리·악성 매크로 차단·접근성 수식 대체,TC-EXT-015,PLANNED
+EXT-016,Bundled extension 1.46,MultimediaViewer,MultimediaViewer,P1,모바일/접근성/파일 권한 검증,TC-EXT-016,PLANNED
+EXT-017,Bundled extension 1.46,Nuke,Nuke,P1,최대 건수 제한·부분실패/실행 로그,TC-EXT-017,PLANNED
+EXT-018,Bundled extension 1.46,OATHAuth,OATHAuth,P1,OTP 회전/재사용 방지·백업코드 폐기,TC-EXT-018,PLANNED
+EXT-019,Bundled extension 1.46,PageImages,PageImages,P1,이미지 변경 시 문서 썸네일 갱신,TC-EXT-019,PLANNED
+EXT-020,Bundled extension 1.46,ParserFunctions,ParserFunctions,P1,함수별 Golden tests/에러·리소스 제한,TC-EXT-020,PLANNED
+EXT-021,Bundled extension 1.46,PdfHandler,PdfHandler,P1,큰 PDF/암호화/손상 파일 fallback,TC-EXT-021,PLANNED
+EXT-022,Bundled extension 1.46,Poem,Poem,P1,빈 줄·공백·마크업 속성 보존,TC-EXT-022,PLANNED
+EXT-023,Bundled extension 1.46,Replace Text,Replace Text,P1,선택/전후 diff/실패 재개/권한 검사,TC-EXT-023,PLANNED
+EXT-024,Bundled extension 1.46,Scribunto,Scribunto,P1,CPU/메모리/라이브러리 접근 제한·모듈 100개 fixture,TC-EXT-024,PLANNED
+EXT-025,Bundled extension 1.46,SecureLinkFixer,SecureLinkFixer,P1,unsafe redirect·scheme 처리/정상 링크 보존,TC-EXT-025,PLANNED
+EXT-026,Bundled extension 1.46,SpamBlacklist,SpamBlacklist,P1,악성 URL 차단/예외/패턴 타임아웃,TC-EXT-026,PLANNED
+EXT-027,Bundled extension 1.46,SyntaxHighlight,SyntaxHighlight,P1,언어 자동 감지/코드 인젝션 차단,TC-EXT-027,PLANNED
+EXT-028,Bundled extension 1.46,TemplateData,TemplateData,P1,필수·별칭·타입·기본값 폼/검증,TC-EXT-028,PLANNED
+EXT-029,Bundled extension 1.46,TemplateStyles,TemplateStyles,P1,외부 URL/위험 CSS 제한·범위 격리,TC-EXT-029,PLANNED
+EXT-030,Bundled extension 1.46,TextExtracts,TextExtracts,P1,테이블/각주/템플릿 제거 정책 및 접근권한,TC-EXT-030,PLANNED
+EXT-031,Bundled extension 1.46,Thanks,Thanks,P1,중복 감사 방지·알림 수신,TC-EXT-031,PLANNED
+EXT-032,Bundled extension 1.46,TitleBlacklist,TitleBlacklist,P1,금지 제목 생성·이동·사용자 등록 거부,TC-EXT-032,PLANNED
+EXT-033,Bundled extension 1.46,VisualEditor,VisualEditor,P1,"링크·표·인용·템플릿 왕복 테스트, 소스 변환 경고",TC-EXT-033,PLANNED
+EXT-034,Bundled extension 1.46,WikiEditor,WikiEditor,P0,"툴바 명령, 키보드, 미리보기",TC-EXT-034,PLANNED

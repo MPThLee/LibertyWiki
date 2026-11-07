@@ -1,0 +1,42 @@
+﻿capability_id,domain,mediawiki_compat_action,mediawiki_compat_rest,native_method,native_path,native_operation_id,permission,mutates,source_version,status,notes
+CAP-PAGE-READ,page,action=query&prop=revisions,GET /w/rest.php/v1/page/{title},GET,/api/v1/pages/{pageId},getPage,read,NO,1.46.2,DESIGN_PENDING_VERIFICATION,MW routes illustrative; baseline verify
+CAP-PAGE-READ-TITLE,page,action=query&prop=info,GET /w/rest.php/v1/page/{title},GET,/api/v1/pages/by-title/{title},getPageByTitle,read,NO,1.46.2,DESIGN_PENDING_VERIFICATION,MW routes illustrative; baseline verify
+CAP-PAGE-CREATE,page,action=edit (create),POST /w/rest.php/v1/page (verify),POST,/api/v1/pages,createPage,edit,YES,1.46.2,DESIGN_PENDING_VERIFICATION,MW REST original baseline verify
+CAP-REVISION-COMMIT,revision,action=edit,TBD: inventory,POST,/api/v1/pages/{pageId}/revisions,commitRevision,edit,YES,1.46.2,DESIGN_PENDING_VERIFICATION,MediaWiki REST write routes require verification
+CAP-REVISION-HISTORY,revision,action=query&prop=revisions,TBD: inventory,GET,/api/v1/pages/{pageId}/revisions,getRevisions,read,NO,1.46.2,DESIGN_PENDING_VERIFICATION,Includes hidden revision rights
+CAP-REVISION-READ,revision,action=query&prop=revisions&revids=,TBD: inventory,GET,/api/v1/revisions/{revisionId},getRevision,read,NO,1.46.2,DESIGN_PENDING_VERIFICATION,ID mapping
+CAP-PAGE-MOVE,page,action=move,TBD: inventory,POST,/api/v1/pages/{pageId}/moves,movePage,move,YES,1.46.2,DESIGN_PENDING_VERIFICATION,Redirect effects
+CAP-PAGE-DELETE,page,action=delete,TBD: inventory,DELETE,/api/v1/pages/{pageId},deletePage,delete,YES,1.46.2,DESIGN_PENDING_VERIFICATION,Tombstones
+CAP-PAGE-UNDELETE,page,action=undelete,TBD: inventory,POST,/api/v1/pages/{pageId}/restorations,restorePage,undelete,YES,1.46.2,DESIGN_PENDING_VERIFICATION,Exact original params pending
+CAP-PAGE-PROTECT,security,action=protect,TBD: inventory,PUT,/api/v1/pages/{pageId}/protection,setPageProtection,protect,YES,1.46.2,DESIGN_PENDING_VERIFICATION,ACL audit
+CAP-REVISION-ROLLBACK,revision,action=rollback,TBD: inventory,POST,/api/v1/pages/{pageId}/rollbacks,rollbackRevision,rollback,YES,1.46.2,DESIGN_PENDING_VERIFICATION,Rollback revision append
+CAP-REVISION-UNDO,revision,action=edit (undo),TBD: inventory,POST,/api/v1/pages/{pageId}/undos,undoRevision,edit,YES,1.46.2,DESIGN_PENDING_VERIFICATION,Conflict policy
+CAP-PARSE,parser,action=parse,TBD: inventory,POST,/api/v1/parse,parseWikitext,read,NO,1.46.2,DESIGN_PENDING_VERIFICATION,Wikitext fixtures
+CAP-SEARCH,search,action=query&list=search,TBD: inventory,GET,/api/v1/search,search,read,NO,1.46.2,DESIGN_PENDING_VERIFICATION,Visibility
+CAP-WATCH,watchlist,action=watch,TBD: inventory,PUT,/api/v1/watchlist/pages/{pageId},watchPage,editmywatchlist,YES,1.46.2,DESIGN_PENDING_VERIFICATION,Policy
+CAP-WATCH-REMOVE,watchlist,action=watch (unwatch),TBD: inventory,DELETE,/api/v1/watchlist/pages/{pageId},unwatchPage,editmywatchlist,YES,1.46.2,DESIGN_PENDING_VERIFICATION,Watchlist
+CAP-RECENTCHANGES,recent,action=query&list=recentchanges,TBD: inventory,GET,/api/v1/recent-changes,getRecentChanges,read,NO,1.46.2,DESIGN_PENDING_VERIFICATION,Pagination
+CAP-USER-INFO,user,action=query&meta=userinfo,TBD: inventory,GET,/api/v1/users/me,getCurrentUser,read,NO,1.46.2,DESIGN_PENDING_VERIFICATION,Personal data scope
+CAP-USER-CONTRIB,user,action=query&list=usercontribs,TBD: inventory,GET,/api/v1/users/{userId}/contributions,getUserContributions,read,NO,1.46.2,DESIGN_PENDING_VERIFICATION,Visibility policy
+CAP-FILE-UPLOAD,media,action=upload,TBD: inventory,POST,/api/v1/files/uploads,beginUpload,upload,YES,1.46.2,DESIGN_PENDING_VERIFICATION,Staged upload
+CAP-FILE-CONTENT,media,action=query&prop=imageinfo,TBD: inventory,GET,/api/v1/files/{fileId}/content,getFileContent,read,NO,1.46.2,DESIGN_PENDING_VERIFICATION,Range/private ACL
+CAP-FILE-INFO,media,action=query&prop=imageinfo,TBD: inventory,GET,/api/v1/files/{fileId},getFileInfo,read,NO,1.46.2,DESIGN_PENDING_VERIFICATION,Revision/thumbnail
+CAP-TEMPLATE-QUERY,parser,action=query&prop=templates,TBD: inventory,GET,/api/v1/pages/{pageId}/templates,getUsedTemplates,read,NO,1.46.2,DESIGN_PENDING_VERIFICATION,Dependency graph
+CAP-BACKLINKS,links,action=query&list=backlinks,TBD: inventory,GET,/api/v1/pages/{pageId}/backlinks,getBacklinks,read,NO,1.46.2,DESIGN_PENDING_VERIFICATION,Redirect
+CAP-CATEGORIES,category,action=query&prop=categories,TBD: inventory,GET,/api/v1/pages/{pageId}/categories,getCategories,read,NO,1.46.2,DESIGN_PENDING_VERIFICATION,Category membership
+CAP-CATEGORY-MEMBERS,category,action=query&list=categorymembers,TBD: inventory,GET,/api/v1/categories/{categoryId}/members,getCategoryMembers,read,NO,1.46.2,DESIGN_PENDING_VERIFICATION,Page set
+CAP-BLOCK,admin,action=block,TBD: inventory,POST,/api/v1/admin/blocks,createBlock,block,YES,1.46.2,DESIGN_PENDING_VERIFICATION,Security rights
+CAP-UNBLOCK,admin,action=unblock,TBD: inventory,DELETE,/api/v1/admin/blocks/{blockId},removeBlock,block,YES,1.46.2,DESIGN_PENDING_VERIFICATION,Audit
+CAP-SITEINFO,admin,action=query&meta=siteinfo,TBD: inventory,GET,/api/v1/site,getSiteInfo,read,NO,1.46.2,DESIGN_PENDING_VERIFICATION,Namespaces/rights
+CAP-USER-RIGHTS,admin,action=userrights,TBD: inventory,PUT,/api/v1/admin/users/{userId}/groups,setUserGroups,userrights,YES,1.46.2,DESIGN_PENDING_VERIFICATION,ACL
+CAP-EXT-ABUSEFILTER-TEST,extension:AbuseFilter,action=abusefiltercheckmatch (verify),TBD: inventory,POST,/api/v1/extensions/abuse-filter/tests,testAbuseFilter,abusefilter-modify,NO,1.46.2,DESIGN_PENDING_VERIFICATION,Only if origin active / version verified
+CAP-EXT-CHECKUSER-QUERY,extension:CheckUser,TBD: inventory,TBD: inventory,POST,/api/v1/extensions/check-user/queries,queryCheckUser,checkuser,NO,1.46.2,DESIGN_PENDING_VERIFICATION,PII and audit
+CAP-EXT-ECHO-READ,extension:Echo,TBD: inventory,TBD: inventory,GET,/api/v1/notifications,getNotifications,read,NO,1.46.2,DESIGN_PENDING_VERIFICATION,Private scope
+CAP-EXT-THANKS,extension:Thanks,TBD: inventory,TBD: inventory,POST,/api/v1/revisions/{revisionId}/thanks,sendThanks,thank,YES,1.46.2,DESIGN_PENDING_VERIFICATION,Duplicate
+CAP-EXT-MATH,extension:Math,TBD: inventory,TBD: inventory,POST,/api/v1/render/math,renderMath,read,NO,1.46.2,DESIGN_PENDING_VERIFICATION,Renderer worker
+CAP-EXT-PARSERFUNCTIONS,extension:ParserFunctions,UI_OR_WIKITEXT,UI_OR_WIKITEXT,POST,/api/v1/parse,parseWikitext,read,NO,1.46.2,DESIGN_PENDING_VERIFICATION,Native parse exposes parser function
+CAP-STORAGE-SETTINGS,admin,UI_ONLY,UI_ONLY,GET,/api/v1/admin/storage/backends,getStorageBackends,admin,NO,1.46.2,DESIGN_PENDING_VERIFICATION,New platform feature
+CAP-STORAGE-MIGRATION,admin,UI_ONLY,UI_ONLY,POST,/api/v1/admin/storage/migrations,createStorageMigration,admin,YES,1.46.2,DESIGN_PENDING_VERIFICATION,New platform feature
+CAP-EXT-INSTALL,extension-management,UI_ONLY,UI_ONLY,POST,/api/v1/admin/extensions,installExtension,admin,YES,1.46.2,DESIGN_PENDING_VERIFICATION,New platform feature
+CAP-EXT-DISABLE,extension-management,UI_ONLY,UI_ONLY,POST,/api/v1/admin/extensions/{extensionId}/disable,disableExtension,admin,YES,1.46.2,DESIGN_PENDING_VERIFICATION,New platform feature
+CAP-COMPAT-REPORT,operations,UI_ONLY,UI_ONLY,GET,/api/v1/admin/compatibility/report,getCompatibilityReport,admin,NO,1.46.2,DESIGN_PENDING_VERIFICATION,New platform feature
