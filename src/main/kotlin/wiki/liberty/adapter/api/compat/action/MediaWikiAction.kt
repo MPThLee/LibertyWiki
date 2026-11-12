@@ -2,7 +2,9 @@
 package wiki.liberty.adapter.api.compat.action
 
 import jakarta.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletResponse
 import org.springframework.http.MediaType
+import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import wiki.liberty.adapter.api.InvalidCredentials
 import wiki.liberty.adapter.api.PageHttp
@@ -13,12 +15,15 @@ import wiki.liberty.application.HistoryRequest
 import wiki.liberty.application.PageActor
 import wiki.liberty.application.PageApplicationService
 import wiki.liberty.application.RevisionBase
+import wiki.liberty.domain.ComparisonRevisionMissing
+import wiki.liberty.domain.ComparisonRevisionHidden
 import wiki.liberty.domain.PageError
 import wiki.liberty.domain.PageFailure
 import wiki.liberty.domain.PageLookup
 import wiki.liberty.domain.PageTitle
 import wiki.liberty.domain.RevisionLookup
 import wiki.liberty.domain.RevisionMetadata
+import wiki.liberty.domain.RevisionSource
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -44,6 +49,56 @@ class MediaWikiAction(private val pages: PageApplicationService, private val htt
             "query" -> query(actor, params)
             "edit" -> edit(request, actor, params)
             else -> throw ActionFailure("badaction", "The requested action is unsupported.")
+        }
+    }
+
+    @RequestMapping("/w/api.php", params = ["action=compare"], method = [RequestMethod.GET, RequestMethod.POST],
+        produces = [MediaType.APPLICATION_JSON_VALUE])
+    fun compareAction(request: HttpServletRequest): ResponseEntity<ByteArray> {
+        val actor = http.actor(request)
+        pages.requireRead(actor)
+        val params = ActionParams(request.parameterMap)
+        if (params.get("format") !in listOf(null, "json") || params.get("formatversion") !in listOf(null, "1", "2", "latest")) {
+            unsupported("Only JSON formatversion 1 and 2 are supported for comparison.")
+        }
+        return http.comparisonResponse(compare(actor, params))
+    }
+
+    private fun compare(actor: PageActor, params: ActionParams): Map<String, Any> {
+        params.only("fromrev", "torev", "prop", "difftype")
+        if (params.get("difftype") !in listOf(null, "table")) unsupported("Only the table diff is supported.")
+        val fields = (params.get("prop") ?: "diff|ids|title").split('|').filter { it.isNotEmpty() }.toSet()
+        if (!setOf("diff", "ids", "title", "diffsize").containsAll(fields)) {
+            unsupported("A compare property is unsupported.")
+        }
+        fun lookup(name: String): RevisionLookup.CompatId {
+            val value = params.get(name) ?: throw ActionFailure("missingparam", "Specify $name.")
+            return RevisionLookup.CompatId(value.toLongOrNull() ?: throw ActionFailure("badinteger", "Invalid $name."))
+        }
+        val comparison = pages.compareRevisions(actor, lookup("fromrev"), lookup("torev"))
+        val versionTwo = params.get("formatversion") in listOf("2", "latest")
+        return mapOf("compare" to buildMap {
+            putAll(comparison.from.compareFields("from", fields))
+            putAll(comparison.to.compareFields("to", fields))
+            val hidden = if (versionTwo) true else ""
+            if (comparison.from.revision.sourceRestricted) put("fromtexthidden", hidden)
+            if (comparison.to.revision.sourceRestricted) put("totexthidden", hidden)
+            if ("diff" in fields || "diffsize" in fields) {
+                val html = actionDiff(comparison)
+                if ("diff" in fields) put(if (versionTwo) "body" else "*", html)
+                if ("diffsize" in fields) put("diffsize", html.toByteArray().size)
+            }
+        })
+    }
+
+    private fun RevisionSource.compareFields(prefix: String, fields: Set<String>): Map<String, Any> = buildMap {
+        if ("ids" in fields) {
+            put("${prefix}id", page.compatId)
+            put("${prefix}revid", revision.compatId)
+        }
+        if ("title" in fields) {
+            put("${prefix}ns", 0)
+            put("${prefix}title", page.title.value)
         }
     }
 
@@ -132,7 +187,8 @@ class MediaWikiAction(private val pages: PageApplicationService, private val htt
         val entry = mutableMapOf<String, Any>("pageid" to history.page.compatId, "ns" to 0, "title" to normalized)
         if ("info" in props) history.current?.let { current ->
             entry.putAll(info())
-            entry.putAll(mapOf("touched" to current.createdAt, "lastrevid" to current.compatId, "length" to current.size))
+            entry.putAll(mapOf("touched" to current.createdAt, "lastrevid" to current.compatId))
+            current.size?.let { entry["length"] = it }
             if (current.parentId == null) entry["new"] = true
         }
         val selected = if (currentOnly) listOfNotNull(history.current) else history.revisions
@@ -200,7 +256,7 @@ class MediaWikiAction(private val pages: PageApplicationService, private val htt
         if ("timestamp" in fields) put("timestamp", revision.createdAt)
         if ("flags" in fields) put("minor", false)
         if ("comment" in fields) put("comment", revision.summary)
-        if ("size" in fields) put("size", revision.size)
+        if ("size" in fields) revision.size?.let { put("size", it) }
         if ("user" in fields) {
             put("user", revision.actor)
             if (revision.actor == "anonymous") put("anon", true)
@@ -253,10 +309,11 @@ private fun unsupported(message: String): Nothing = throw ActionFailure("unsuppo
 @RestControllerAdvice(assignableTypes = [MediaWikiAction::class])
 class MediaWikiActionErrors {
     @ExceptionHandler(ActionFailure::class)
-    fun transport(failure: ActionFailure) = error(failure.code, failure.message.orEmpty())
+    fun transport(failure: ActionFailure, request: HttpServletRequest, response: HttpServletResponse) =
+        error(failure.code, failure.message.orEmpty()).also { setCompareErrorHeader(request, response, it) }
 
     @ExceptionHandler(PageFailure::class)
-    fun domain(failure: PageFailure, request: HttpServletRequest) = when (failure.error) {
+    fun domain(failure: PageFailure, request: HttpServletRequest, response: HttpServletResponse) = when (failure.error) {
         PageError.EXISTS -> error("articleexists", "The page you tried to create has been created already.")
         PageError.PAGE_NOT_FOUND -> if (request.getParameter("pageid") == null) {
             error("missingtitle", "The page you specified doesn't exist.")
@@ -271,11 +328,29 @@ class MediaWikiActionErrors {
             error("readapidenied", "Read permission is required.")
         }
         PageError.INVALID_TITLE -> error("invalidtitle", "The title is invalid.")
+        PageError.REVISION_NOT_FOUND -> {
+            val revision = (failure as? ComparisonRevisionMissing)?.lookup as? RevisionLookup.CompatId
+            if (revision == null) error("nosuchrevid", "The revision does not exist.")
+            else error("nosuchrevid", "There is no revision with ID ${revision.value}.")
+        }
+        PageError.REVISION_SOURCE_HIDDEN -> {
+            val revision = (failure as? ComparisonRevisionHidden)?.lookup as? RevisionLookup.CompatId
+            if (revision == null) error("missingcontent", "The revision source is restricted.")
+            else error("missingcontent", "Missing content for revision ID ${revision.value}.")
+        }
+        PageError.REVISION_PAGE_MISMATCH -> error("unsupported", "Cross-page comparison is outside this profile.")
+        PageError.COMPARISON_TOO_LARGE -> error("comparison-too-large", "The revision comparison exceeds the processing or output limit.")
         else -> error("invalidparam", "The request is invalid.")
-    }
+    }.also { setCompareErrorHeader(request, response, it) }
 
     @ExceptionHandler(InvalidCredentials::class)
     fun credentials() = error("permissiondenied", "Invalid Bearer credential.")
 
     private fun error(code: String, info: String) = ActionErrorEnvelope(ActionError(code, info))
+
+    private fun setCompareErrorHeader(
+        request: HttpServletRequest, response: HttpServletResponse, envelope: ActionErrorEnvelope,
+    ) {
+        if (request.getParameter("action") == "compare") response.setHeader("MediaWiki-API-Error", envelope.error.code)
+    }
 }

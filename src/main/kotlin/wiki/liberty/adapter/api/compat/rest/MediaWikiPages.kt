@@ -22,6 +22,8 @@ import wiki.liberty.application.HistoryRequest
 import wiki.liberty.application.PageActor
 import wiki.liberty.application.PageApplicationService
 import wiki.liberty.application.RevisionBase
+import wiki.liberty.domain.ComparisonRevisionMissing
+import wiki.liberty.domain.ComparisonRevisionHidden
 import wiki.liberty.domain.Page
 import wiki.liberty.domain.PageError
 import wiki.liberty.domain.PageFailure
@@ -67,7 +69,7 @@ data class RestHistoryEntry(
     val id: Long,
     val timestamp: Instant,
     val minor: Boolean,
-    val size: Int,
+    @get:JsonInclude(JsonInclude.Include.NON_NULL) val size: Int?,
     val comment: String,
     val user: RestRevisionUser,
     val delta: Int?,
@@ -245,11 +247,31 @@ class MediaWikiPages(
         val revision = source.revision
         val page = source.page
         return RestRevisionSource(
-            revision.compatId, revision.size, false, revision.createdAt, "wikitext",
+            revision.compatId, checkNotNull(revision.size), false, revision.createdAt, "wikitext",
             RestRevisionPage(page.compatId, page.title.key, page.title.value),
             RestLicense(settings.licenseUrl, settings.licenseTitle), revision.user(), revision.summary,
             revision.delta, source.source,
         )
+    }
+
+    @GetMapping("/revision/{from}/compare/{to}")
+    fun compare(@PathVariable from: String, @PathVariable to: String, request: HttpServletRequest): ResponseEntity<ByteArray> {
+        val actor = http.actor(request)
+        pages.requireRead(actor)
+        val left = revisionId("from", from)
+        val right = revisionId("to", to)
+        val comparison = try {
+            pages.compareRevisions(actor, left, right)
+        } catch (failure: ComparisonRevisionMissing) {
+            val parameter = failure.side.name.lowercase()
+            throw RestFailure(HttpStatus.NOT_FOUND, "rest-compare-nonexistent",
+                "The revision specified by the $parameter parameter does not exist.")
+        } catch (failure: ComparisonRevisionHidden) {
+            val parameter = failure.side.name.lowercase()
+            throw RestFailure(HttpStatus.FORBIDDEN, "rest-compare-inaccessible",
+                "The revision specified by the $parameter parameter is not publicly accessible.")
+        }
+        return http.comparisonResponse(comparison.restComparison())
     }
 
     private fun RevisionMetadata.user() = RestRevisionUser(if (actor == "anonymous") null else 1L, actor)
@@ -286,7 +308,12 @@ class MediaWikiRestErrors {
         PageError.PAGE_NOT_FOUND -> error(HttpStatus.NOT_FOUND, "apierror-missingtitle", "The page you specified doesn't exist.")
         PageError.EDIT_CONFLICT -> error(HttpStatus.CONFLICT, "editconflict", "Edit conflict.")
         PageError.FORBIDDEN -> error(HttpStatus.FORBIDDEN, "rest-permission-denied", "The page operation is forbidden.")
+        PageError.REVISION_SOURCE_HIDDEN -> error(HttpStatus.FORBIDDEN, "rest-permission-denied", "The revision source is restricted.")
         PageError.INVALID_TITLE -> error(HttpStatus.BAD_REQUEST, "apierror-invalidtitle", "The title is invalid.")
+        PageError.REVISION_PAGE_MISMATCH -> error(HttpStatus.BAD_REQUEST, "rest-compare-page-mismatch",
+            "The specified revisions belong to different pages; refusing to compare them.")
+        PageError.COMPARISON_TOO_LARGE -> error(HttpStatus.UNPROCESSABLE_ENTITY, "comparison-too-large",
+            "The revision comparison exceeds the processing or output limit.")
         else -> error(HttpStatus.BAD_REQUEST, "rest-body-validation-error", "The request body is invalid.")
     }
 

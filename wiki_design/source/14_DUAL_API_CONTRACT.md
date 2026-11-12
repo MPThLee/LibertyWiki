@@ -72,6 +72,8 @@ status: INCOMPLETE
 
 `CAP-REVISION-HISTORY`와 `CAP-REVISION-READ`의 매핑, 공통 읽기 정책과 차등 검증 기준은 [리비전 이력과 이전 원문 계약](15_PAGE_SOURCE_SLICE.md#리비전-이력과-이전-원문)에 명시합니다.
 
+`CAP-REVISION-COMPARE`의 두 API 계열 매핑과 Wikidiff2 기준 프로파일은 [저장된 리비전 비교 계약](15_PAGE_SOURCE_SLICE.md#저장된-리비전-비교)에 명시합니다.
+
 각 operation의 metadata: `capabilityId`, `upstreamVersionIntroduced`, `upstreamVersionChanged`, `mwCompatAction`, `mwCompatRest`, `nativeOperationIds`, `permissionPolicyId`, `sideEffectIds`, `testIds`, `extensionId`, `status`, `owner`, `fixtureVersion`, `releaseId`.
 
 ### API 진화 관리

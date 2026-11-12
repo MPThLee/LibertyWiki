@@ -36,6 +36,119 @@ class PagePostgresTest {
     private val source = "== Source ==\r\n<script>literal</script>\n"
 
     @Test
+    fun `comparison preserves direction and literal Wikitext across all read surfaces`() {
+        val title = "Compare ${UUID.randomUUID()}"
+        val first = http.nativeCreate(title, "{|\n| {{틀|한😀}}\n|}\n").json
+        val pageId = first["id"].asText()
+        val oldId = first["currentRevisionId"].asText()
+        val compatOld = http.restRead(title.replace(' ', '_'), operatorToken).json.at("/latest/id").asLong()
+        val literal = "<img src=x onerror=alert(1)>"
+        val second = http.postJson("$native/$pageId/revisions", mapOf(
+            "baseRevisionId" to oldId, "source" to "{|\n| {{틀|한🌱}}\n|}\n$literal\n",
+        ), operatorToken).json
+        val newId = second["currentRevisionId"].asText()
+        val compatNew = http.restRead(title.replace(' ', '_'), operatorToken).json.at("/latest/id").asLong()
+        assertThat(compatNew).isGreaterThan(compatOld)
+        assertThat(compatOld).isPositive()
+        val before = rowCounts()
+        val operation = "/paths/~1revisions~1{fromId}~1compare~1{toId}/get/responses"
+
+        fun nativeCompare(from: String, to: String) = http.get("/api/v1/revisions/$from/compare/$to", operatorToken)
+
+        val forward = nativeCompare(oldId, newId)
+        assertThat(forward.status).isEqualTo(200)
+        assertThat(forward.header("Cache-Control")).isEqualTo("no-store")
+        assertSchema("$operation/200", forward.json)
+        assertThat(forward.json.at("/from/id").asText()).isEqualTo(oldId)
+        assertThat(forward.json.at("/to/id").asText()).isEqualTo(newId)
+        val changed = forward.json["lines"].first { it["type"].asText() == "changed" }
+        assertThat(changed["from"].filter { it["changed"].asBoolean() }.joinToString("") { it["text"].asText() }).isEqualTo("😀")
+        assertThat(changed["to"].filter { it["changed"].asBoolean() }.joinToString("") { it["text"].asText() }).isEqualTo("🌱")
+        assertThat(nativeCompare(newId, oldId).json["lines"].map { it["type"].asText() }).contains("deleted")
+        assertThat(nativeCompare(oldId, oldId).json["lines"].size()).isZero()
+
+        val action = http.actionCompare(compatOld, compatNew, operatorToken)
+        assertThat(action.status).isEqualTo(200)
+        assertThat(action.json.at("/compare/fromrevid").asLong()).isEqualTo(compatOld)
+        assertThat(action.json.at("/compare/torevid").asLong()).isEqualTo(compatNew)
+        assertThat(action.json.at("/compare/body").asText()).contains("&lt;img").doesNotContain("<img")
+        val rest = http.restCompare(compatOld, compatNew, operatorToken)
+        assertThat(rest.status).isEqualTo(200)
+        assertThat(rest.json.at("/from/id").asLong()).isEqualTo(compatOld)
+        assertThat(rest.json.at("/to/id").asLong()).isEqualTo(compatNew)
+        assertThat(rest.json["diff"].map { it["type"].asInt() }).contains(1, 3)
+
+        assertThat(http.get("$native/$pageId", operatorToken).json).isEqualTo(second)
+        assertThat(rowCounts()).isEqualTo(before)
+    }
+
+    @Test
+    fun `comparison enforces read policy and rejects unavailable unrelated and oversized inputs without writes`() {
+        val title = "Private ${UUID.randomUUID()}"
+        val source = "private source\n".repeat(2_001)
+        val page = http.nativeCreate(title, source).json
+        val pageId = page["id"].asText()
+        val revision = page["currentRevisionId"].asText()
+        val otherTitle = "Unrelated ${UUID.randomUUID()}"
+        val unrelated = http.nativeCreate(otherTitle, "unrelated source").json["currentRevisionId"].asText()
+        val compatId = http.restRead(title.replace(' ', '_'), operatorToken).json.at("/latest/id").asLong()
+        val unrelatedCompatId = http.restRead(otherTitle.replace(' ', '_'), operatorToken).json.at("/latest/id").asLong()
+        assertThat(unrelatedCompatId).isGreaterThan(compatId)
+        assertThat(compatId).isPositive()
+        val missing = UUID.randomUUID().toString()
+        val missingCompatId = 9_999_999L
+        val before = rowCounts()
+        val operation = "/paths/~1revisions~1{fromId}~1compare~1{toId}/get/responses"
+
+        fun nativeCompare(from: String, to: String, auth: String? = operatorToken) =
+            http.get("/api/v1/revisions/$from/compare/$to", auth)
+
+        fun checkNative(result: ContractHttp.Result, status: Int, code: String) {
+            assertThat(result.status).isEqualTo(status)
+            assertThat(result.json["code"].asText()).isEqualTo(code)
+            assertSchema("$operation/$status", result.json)
+        }
+        for (pair in listOf(revision to missing, missing to revision, revision to unrelated, revision to revision)) {
+            checkNative(nativeCompare(pair.first, pair.second, null), 403, "FORBIDDEN")
+        }
+        for (pair in listOf(compatId to missingCompatId, missingCompatId to compatId, compatId to unrelatedCompatId, compatId to compatId)) {
+            val action = http.actionCompare(pair.first, pair.second)
+            assertThat(action.json.at("/error/code").asText()).isEqualTo("readapidenied")
+            assertThat(action.json.has("compare")).isFalse()
+            val rest = http.restCompare(pair.first, pair.second)
+            assertThat(rest.status).isEqualTo(403)
+            assertThat(rest.json.has("diff")).isFalse()
+        }
+
+        checkNative(nativeCompare(revision, missing), 404, "REVISION_NOT_FOUND")
+        checkNative(nativeCompare(missing, revision), 404, "REVISION_NOT_FOUND")
+        checkNative(nativeCompare(revision, unrelated), 400, "REVISION_PAGE_MISMATCH")
+        checkNative(nativeCompare(revision, "invalid"), 422, "INVALID_REVISION_ID")
+        checkNative(nativeCompare(revision, revision), 422, "COMPARISON_TOO_LARGE")
+        checkNative(nativeCompare(revision, revision, "wrong-credential"), 401, "INVALID_CREDENTIALS")
+        assertThat(http.actionCompare(compatId, unrelatedCompatId, operatorToken).json.at("/error/code").asText())
+            .isEqualTo("unsupported")
+        assertThat(http.actionCompare(compatId, compatId, operatorToken).json.at("/error/code").asText())
+            .isEqualTo("comparison-too-large")
+        assertThat(http.restCompare(compatId, unrelatedCompatId, operatorToken).status).isEqualTo(400)
+        assertThat(http.restCompare(compatId, compatId, operatorToken).status).isEqualTo(422)
+        assertThat(http.get("$native/$pageId", operatorToken).json).isEqualTo(page)
+        assertThat(rowCounts()).isEqualTo(before)
+    }
+
+    @Test
+    fun `REST comparison limits serialized section metadata even for identical source`() {
+        val title = "Large-heading-${UUID.randomUUID()}"
+        val created = http.nativeCreate(title, "== ${"\u0001".repeat(350_000)} ==")
+        assertThat(created.status).isEqualTo(201)
+        val id = http.restRead(title, operatorToken).json.at("/latest/id").asLong()
+        assertThat(id).isPositive()
+        val comparison = http.restCompare(id, id, operatorToken)
+        assertThat(comparison.status).isEqualTo(422)
+        assertThat(comparison.json["errorKey"].asText()).isEqualTo("comparison-too-large")
+    }
+
+    @Test
     fun `native revision history returns immutable source newest first`() {
         val created = http.nativeCreate("History ${UUID.randomUUID()}", source).json
         val pageId = created["id"].asText()

@@ -53,6 +53,6 @@ export WIKI_BROWSER_TOKEN="$WIKI_HTTP_OPERATOR_TOKEN"
 npm test --prefix web
 ```
 
-설치된 Chrome을 사용하는 경우 `WIKI_BROWSER_CHANNEL=chrome`을 지정합니다.
+설치된 Chrome을 사용하는 경우 `WIKI_BROWSER_CHANNEL=chrome`을 지정합니다. 이력 화면에서 기준판과 대상판을 선택해 저장된 Wikitext의 [리비전 비교](wiki_design/source/15_PAGE_SOURCE_SLICE.md#저장된-리비전-비교)를 확인할 수 있습니다. 비교 차등 시험에는 MediaWiki 1.46.2와 Wikidiff2 1.14.2를 사용합니다. 시험 서버에서 `php --ri wikidiff2`로 설치 버전을 확인합니다.
 
 프로젝트 소스는 [AGPL-3.0-only](LICENSE)를 따릅니다. [Gradle Wrapper](https://gradle.org/release-checksums/)와 [Spring Boot](https://github.com/spring-projects/spring-boot/blob/main/LICENSE.txt), [Kotlin](https://github.com/JetBrains/kotlin/blob/master/license/LICENSE.txt)은 Apache-2.0, [PostgreSQL JDBC](https://github.com/pgjdbc/pgjdbc/blob/master/LICENSE)는 BSD-2-Clause, [React](https://github.com/facebook/react/blob/main/LICENSE)와 [Vite](https://github.com/vitejs/vite/blob/main/LICENSE)는 MIT 라이선스입니다.

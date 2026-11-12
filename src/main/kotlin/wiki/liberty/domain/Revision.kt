@@ -19,8 +19,20 @@ data class RevisionMetadata(
     val createdAt: Instant,
     val summary: String,
     val actor: String,
-    val size: Int,
+    val size: Int?,
     val delta: Int?,
+    val sourceRestricted: Boolean = false,
+    val parentSourceRestricted: Boolean = false,
 )
 
 data class RevisionSource(val page: RevisionPage, val revision: RevisionMetadata, val source: String)
+
+enum class ComparisonSide { FROM, TO }
+
+class ComparisonRevisionHidden(val side: ComparisonSide, val lookup: RevisionLookup) :
+    PageFailure(PageError.REVISION_SOURCE_HIDDEN)
+
+class ComparisonRevisionMissing(val side: ComparisonSide, val lookup: RevisionLookup) :
+    PageFailure(PageError.REVISION_NOT_FOUND)
+
+data class RevisionComparison(val from: RevisionSource, val to: RevisionSource, val lines: List<DiffLine>)

@@ -19,6 +19,10 @@ type RevisionSummary = {
 }
 type RevisionHistory = { revisions: RevisionSummary[]; nextCursor: string | null }
 type Revision = RevisionSummary & { pageId: string; normalizedTitle: string; source: string; contentModel: string }
+type CompareFragment = { text: string; changed: boolean }
+type CompareLine = { type: 'context' | 'added' | 'deleted' | 'changed'; fromLine: number | null; toLine: number | null; from: CompareFragment[]; to: CompareFragment[] }
+type Comparison = { from: CompareRevision; to: CompareRevision; lines: CompareLine[] }
+type CompareRevision = { id: string; pageId: string; title: string; timestamp: string }
 type PendingDraft = { pageId: string; baseRevisionId: string; source: string; summary: string }
 
 const errorMessages: Record<string, string> = {
@@ -29,6 +33,8 @@ const errorMessages: Record<string, string> = {
   INVALID_SOURCE: '원문은 올바른 유니코드 문자열이어야 하며 UTF-8 기준 1 MiB 이하여야 합니다.',
   INVALID_SUMMARY: '편집 요약은 500자까지 입력할 수 있습니다.',
   EXISTS: '이 제목의 문서가 이미 있습니다.',
+  COMPARISON_TOO_LARGE: '비교할 리비전이 허용된 크기를 초과했습니다.',
+  REVISION_NOT_FOUND: '리비전을 찾을 수 없습니다.',
   PAGE_NOT_FOUND: '이 제목의 문서를 찾을 수 없습니다.',
 }
 
@@ -70,12 +76,18 @@ function App() {
   const [history, setHistory] = useState<RevisionSummary[]>()
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [revision, setRevision] = useState<Revision>()
+  const [compareFrom, setCompareFrom] = useState('')
+  const [compareTo, setCompareTo] = useState('')
+  const [comparison, setComparison] = useState<Comparison>()
   const [pendingDraft, setPendingDraft] = useState<PendingDraft>()
 
   function clearHistory() {
     setHistory(undefined)
     setNextCursor(null)
     setRevision(undefined)
+    setCompareFrom('')
+    setCompareTo('')
+    setComparison(undefined)
   }
 
   function changeToken(value: string) {
@@ -192,6 +204,11 @@ function App() {
       const result = await request<RevisionHistory>(`/api/v1/pages/${encodeURIComponent(page.id)}/revisions?${params}`, token)
       setHistory(previous => cursor ? [...(previous ?? []), ...result.revisions] : result.revisions)
       setNextCursor(result.nextCursor)
+      if (!cursor) {
+        setCompareFrom('')
+        setCompareTo('')
+        setComparison(undefined)
+      }
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : '요청을 처리할 수 없습니다.')
     } finally {
@@ -210,6 +227,25 @@ function App() {
       setRevision(result)
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : '요청을 처리할 수 없습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function compareRevisions() {
+    if (!page || busy || !compareFrom || !compareTo) return
+    setBusy(true)
+    setError('')
+    setStatus('리비전 비교 중')
+    setComparison(undefined)
+    try {
+      const result = await request<Comparison>(`/api/v1/revisions/${encodeURIComponent(compareFrom)}/compare/${encodeURIComponent(compareTo)}`, token)
+      if (result.from.pageId !== page.id || result.to.pageId !== page.id) throw new Error('이 문서의 리비전을 비교하지 못했습니다.')
+      setComparison(result)
+      setStatus('리비전 비교를 불러왔습니다.')
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : '요청을 처리할 수 없습니다.')
+      setStatus('')
     } finally {
       setBusy(false)
     }
@@ -251,17 +287,40 @@ function App() {
               <button type="button" disabled={busy} onClick={() => void fetchHistory()}>문서 이력 보기</button>
               {history && (
                 <>
+                  <p>비교할 시작과 끝 리비전을 각각 선택하세요. 선택 순서대로 비교합니다.</p>
                   <ul>
                     {history.map(item => (
                       <li key={item.id}>
+                        <label className="revision-choice"><input type="radio" name="compare-from" checked={compareFrom === item.id} disabled={busy} onChange={() => { setCompareFrom(item.id); setComparison(undefined) }} /> 시작 {item.id}</label>{' '}
+                        <label className="revision-choice"><input type="radio" name="compare-to" checked={compareTo === item.id} disabled={busy} onChange={() => { setCompareTo(item.id); setComparison(undefined) }} /> 끝 {item.id}</label>{' '}
                         <time dateTime={item.createdAt}>{item.createdAt}</time>{' · '}
                         <span>{item.summary}</span>{' '}
                         <button type="button" disabled={busy} onClick={() => void fetchRevision(item.id)}>리비전 {item.id} 보기</button>
                       </li>
                     ))}
                   </ul>
+                  <button type="button" disabled={busy || !compareFrom || !compareTo} onClick={() => void compareRevisions()}>선택한 리비전 비교</button>{' '}
                   {nextCursor && <button type="button" disabled={busy} onClick={() => void fetchHistory(nextCursor)}>이력 더 보기</button>}
                 </>
+              )}
+              {comparison && (
+                <section aria-labelledby="comparison-title">
+                  <h3 id="comparison-title">리비전 비교</h3>
+                  <p>시작: {comparison.from.id} · <time dateTime={comparison.from.timestamp}>{comparison.from.timestamp}</time><br />
+                    끝: {comparison.to.id} · <time dateTime={comparison.to.timestamp}>{comparison.to.timestamp}</time></p>
+                  {comparison.lines.length === 0 ? <p>차이가 없습니다.</p> : (
+                    <div className="comparison" aria-label="Wikitext 차이">
+                      {comparison.lines.map((line, index) => (
+                        <div className={`diff-line diff-${line.type}`} key={index}>
+                          <span className="diff-kind">{{ context: '변경 없음', added: '추가', deleted: '삭제', changed: '변경' }[line.type]}</span>
+                          {([['시작', line.fromLine, line.from], ['끝', line.toLine, line.to]] as const).map(([side, number, fragments]) => number != null && (
+                            <div key={side} className="diff-side"><span>{side} {number}: </span><code>{fragments.map((fragment, fragmentIndex) => fragment.changed ? <mark key={fragmentIndex}>{fragment.text}</mark> : <span key={fragmentIndex}>{fragment.text}</span>)}</code></div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
               )}
               {revision && (
                 <div>

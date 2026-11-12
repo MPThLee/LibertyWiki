@@ -17,6 +17,7 @@ interface PageRepository {
     fun findByCompatId(id: PageLookup.CompatId): Page?
     fun findRevisionPage(lookup: PageLookup): RevisionPage?
     fun findRevision(lookup: RevisionLookup): RevisionSource?
+    fun findRevisions(from: RevisionLookup, to: RevisionLookup): Pair<RevisionSource?, RevisionSource?>
     fun findHistoryAnchor(page: RevisionPage, lookup: RevisionLookup): RevisionMetadata?
     fun findHistory(page: RevisionPage, window: HistoryWindow, count: Int): List<RevisionMetadata>
     fun create(page: FirstRevision): PageInsert

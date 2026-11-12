@@ -59,3 +59,12 @@ a { color: #155847; }
 @media (max-width: 42rem) {
   .forms { grid-template-columns: minmax(0, 1fr); }
 }
+.revision-choice { display: inline-flex; align-items: center; gap: .25rem; margin: 0 .5rem 0 0; }
+.revision-choice input { width: auto; min-height: auto; margin: 0; }
+.diff-line { border-left: .3rem solid #83968f; padding: .3rem .6rem; }
+.diff-added { border-color: #197347; background: #e7f7ed; }
+.diff-deleted { border-color: #b12828; background: #fff0f0; }
+.diff-changed { border-color: #a36b00; background: #fff8df; }
+.diff-kind { font-weight: 700; }
+.diff-side code { white-space: pre-wrap; overflow-wrap: anywhere; }
+.diff-side mark { background: #ffdf80; color: inherit; }

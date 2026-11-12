@@ -23,6 +23,7 @@ import wiki.liberty.domain.PageFailure
 import wiki.liberty.domain.PageLookup
 import wiki.liberty.domain.RevisionLookup
 import wiki.liberty.domain.RevisionMetadata
+import wiki.liberty.domain.RevisionSource
 import java.net.URI
 import java.time.Instant
 import java.util.UUID
@@ -53,6 +54,20 @@ data class NativeRevisionSource(
     val normalizedTitle: String,
     val source: String,
     val contentModel: String,
+)
+data class NativeComparisonRevision(val id: UUID, val pageId: UUID, val title: String, val timestamp: Instant)
+data class NativeDiffFragment(val text: String, val changed: Boolean)
+data class NativeDiffLine(
+    val type: String,
+    val fromLine: Int?,
+    val toLine: Int?,
+    val from: List<NativeDiffFragment>,
+    val to: List<NativeDiffFragment>,
+)
+data class NativeRevisionComparison(
+    val from: NativeComparisonRevision,
+    val to: NativeComparisonRevision,
+    val lines: List<NativeDiffLine>,
 )
 class NativePageMissing : RuntimeException()
 enum class NativeIdKind { PAGE, BASE_REVISION, REVISION }
@@ -122,6 +137,25 @@ class NativePages(private val pages: PageApplicationService, private val http: P
         )
     }
 
+    @GetMapping("/revisions/{fromId}/compare/{toId}")
+    fun compare(
+        @PathVariable fromId: String, @PathVariable toId: String, request: HttpServletRequest,
+    ): ResponseEntity<ByteArray> {
+        val actor = http.actor(request)
+        pages.requireRead(actor)
+        val from = RevisionLookup.Id(parseId(fromId, NativeIdKind.REVISION))
+        val to = RevisionLookup.Id(parseId(toId, NativeIdKind.REVISION))
+        val comparison = pages.compareRevisions(actor, from, to)
+        return http.comparisonResponse(NativeRevisionComparison(
+            comparison.from.nativeComparisonRevision(), comparison.to.nativeComparisonRevision(),
+            comparison.lines.map { line ->
+                NativeDiffLine(line.type.name.lowercase(), line.fromLine, line.toLine,
+                    line.from.map { NativeDiffFragment(it.text, it.changed) },
+                    line.to.map { NativeDiffFragment(it.text, it.changed) })
+            },
+        ))
+    }
+
     @GetMapping("/pages/by-title/{title}")
     fun byTitle(@PathVariable title: String, request: HttpServletRequest): NativeSourcePage {
         val actor = http.actor(request)
@@ -157,6 +191,8 @@ class NativePages(private val pages: PageApplicationService, private val http: P
 
     private fun Page.native() = NativeSourcePage(id, 0, title.value, revisionId, "ACTIVE", source, "wikitext", createdAt)
     private fun RevisionMetadata.native() = NativeRevisionEntry(id, parentId, createdAt, summary)
+    private fun RevisionSource.nativeComparisonRevision() =
+        NativeComparisonRevision(revision.id, page.id, page.title.value, revision.createdAt)
 }
 
 @RestControllerAdvice(assignableTypes = [NativePages::class])
@@ -164,10 +200,10 @@ class NativePageErrors {
     @ExceptionHandler(PageFailure::class)
     fun domain(failure: PageFailure, request: HttpServletRequest): ResponseEntity<NativeError> {
         val status = when (failure.error) {
-            PageError.FORBIDDEN -> HttpStatus.FORBIDDEN
+            PageError.FORBIDDEN, PageError.REVISION_SOURCE_HIDDEN -> HttpStatus.FORBIDDEN
             PageError.EXISTS, PageError.EDIT_CONFLICT -> HttpStatus.CONFLICT
             PageError.PAGE_NOT_FOUND, PageError.REVISION_NOT_FOUND -> HttpStatus.NOT_FOUND
-            PageError.INVALID_CURSOR, PageError.INVALID_LIMIT -> HttpStatus.BAD_REQUEST
+            PageError.INVALID_CURSOR, PageError.INVALID_LIMIT, PageError.REVISION_PAGE_MISMATCH -> HttpStatus.BAD_REQUEST
             else -> HttpStatus.UNPROCESSABLE_ENTITY
         }
         val message = when (failure.error) {
@@ -176,6 +212,9 @@ class NativePageErrors {
             PageError.EDIT_CONFLICT -> "The page has changed since the base revision."
             PageError.PAGE_NOT_FOUND -> "Page not found."
             PageError.REVISION_NOT_FOUND -> "Revision not found."
+            PageError.REVISION_SOURCE_HIDDEN -> "The revision source is restricted."
+            PageError.REVISION_PAGE_MISMATCH -> "Both revisions must belong to the same page."
+            PageError.COMPARISON_TOO_LARGE -> "The revision comparison exceeds the processing or output limit."
             PageError.INVALID_CURSOR -> "Expected a revision UUID belonging to this page."
             PageError.INVALID_LIMIT -> "Limit must be an integer between 1 and 50."
             PageError.INVALID_TITLE -> "The title is invalid or outside the supported namespace."

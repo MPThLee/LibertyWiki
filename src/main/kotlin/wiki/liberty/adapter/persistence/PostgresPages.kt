@@ -54,6 +54,28 @@ class PostgresPages(private val jdbc: JdbcTemplate) : PageRepository {
         ).singleOrNull()
     }
 
+    override fun findRevisions(from: RevisionLookup, to: RevisionLookup): Pair<RevisionSource?, RevisionSource?> {
+        val (fromColumn, fromKey) = revisionKey(from)
+        val (toColumn, toKey) = revisionKey(to)
+        val revisions = jdbc.query(
+            """
+            SELECT $revisionColumns, p.id, p.compat_id, p.normalized_title, p.current_revision_id, r.source
+            FROM wiki_revision r JOIN wiki_page p ON p.id = r.page_id
+            $parentJoin
+            WHERE r.$fromColumn = ? OR r.$toColumn = ?
+            """.trimIndent(),
+            { row, _ -> RevisionSource(revisionPage(row), metadata(row), row.getString("source")) },
+            fromKey, toKey,
+        )
+        fun select(lookup: RevisionLookup) = revisions.singleOrNull {
+            when (lookup) {
+                is RevisionLookup.Id -> it.revision.id == lookup.value
+                is RevisionLookup.CompatId -> it.revision.compatId == lookup.value
+            }
+        }
+        return select(from) to select(to)
+    }
+
     override fun findHistoryAnchor(page: RevisionPage, lookup: RevisionLookup): RevisionMetadata? {
         val (column, key) = revisionKey(lookup)
         return jdbc.query(
@@ -100,15 +122,18 @@ class PostgresPages(private val jdbc: JdbcTemplate) : PageRepository {
         row.getObject("compat_parent_id", Long::class.javaObjectType),
         row.getTimestamp("created_at").toInstant(), row.getString("summary"), row.getString("actor"),
         row.getInt("source_size"), row.getObject("delta", Int::class.javaObjectType),
+        row.getBoolean("source_restricted"), row.getBoolean("parent_source_restricted"),
     )
 
     private fun find(condition: String, key: Any): Page? = jdbc.query(
         """
         SELECT p.id, p.compat_id, p.normalized_title, r.id AS revision_id,
-               r.compat_id AS compat_revision_id, r.source, r.created_at, parent.compat_id AS compat_parent_id
+               r.compat_id AS compat_revision_id, r.source, r.created_at, parent.compat_id AS compat_parent_id,
+               restriction.revision_id IS NOT NULL AS source_restricted
         FROM wiki_page p
         JOIN wiki_revision r ON r.page_id = p.id AND r.id = p.current_revision_id
         LEFT JOIN wiki_revision parent ON parent.page_id = p.id AND parent.id = r.parent_revision_id
+        LEFT JOIN wiki_revision_source_restriction restriction ON restriction.revision_id = r.id
         WHERE $condition
         """.trimIndent(),
         { row, _ ->
@@ -118,6 +143,7 @@ class PostgresPages(private val jdbc: JdbcTemplate) : PageRepository {
                 row.getObject("revision_id", UUID::class.java), row.getLong("compat_revision_id"),
                 row.getString("source"), row.getTimestamp("created_at").toInstant(),
                 row.getObject("compat_parent_id", Long::class.javaObjectType),
+                row.getBoolean("source_restricted"),
             )
         },
         key,
@@ -157,6 +183,7 @@ class PostgresPages(private val jdbc: JdbcTemplate) : PageRepository {
             source = revision.source,
             createdAt = revision.createdAt,
             compatParentRevisionId = base.compatRevisionId,
+            sourceRestricted = false,
         ))
     }
 
@@ -193,12 +220,18 @@ class PostgresPages(private val jdbc: JdbcTemplate) : PageRepository {
     private companion object {
         // Revisions of one page are serialized, so its captured head bounds the read across statements.
         const val historyScope = "r.page_id = ? AND r.compat_id <= (SELECT compat_id FROM wiki_revision WHERE id = ?)"
-        const val parentJoin = "LEFT JOIN wiki_revision parent ON parent.page_id = r.page_id AND parent.id = r.parent_revision_id"
+        const val parentJoin = """
+            LEFT JOIN wiki_revision parent ON parent.page_id = r.page_id AND parent.id = r.parent_revision_id
+            LEFT JOIN wiki_revision_source_restriction restriction ON restriction.revision_id = r.id
+            LEFT JOIN wiki_revision_source_restriction parent_restriction ON parent_restriction.revision_id = parent.id
+        """
         const val revisionColumns = """
             r.id AS revision_id, r.compat_id AS compat_revision_id, r.parent_revision_id,
             parent.compat_id AS compat_parent_id, r.created_at, r.summary, r.actor,
             octet_length(r.source) AS source_size,
-            octet_length(r.source) - octet_length(parent.source) AS delta
+            octet_length(r.source) - octet_length(parent.source) AS delta,
+            restriction.revision_id IS NOT NULL AS source_restricted,
+            parent_restriction.revision_id IS NOT NULL AS parent_source_restricted
         """
     }
 }

@@ -13,6 +13,7 @@ data class Page(
     val source: String,
     val createdAt: Instant,
     val compatParentRevisionId: Long? = null,
+    val sourceRestricted: Boolean = false,
 )
 
 sealed interface PageLookup {
@@ -23,7 +24,8 @@ sealed interface PageLookup {
 
 enum class PageError {
     FORBIDDEN, INVALID_TITLE, INVALID_NAMESPACE, INVALID_SOURCE, INVALID_SUMMARY, EXISTS,
-    PAGE_NOT_FOUND, REVISION_NOT_FOUND, INVALID_CURSOR, INVALID_LIMIT, EDIT_CONFLICT
+    PAGE_NOT_FOUND, REVISION_NOT_FOUND, INVALID_CURSOR, INVALID_LIMIT, EDIT_CONFLICT,
+    REVISION_PAGE_MISMATCH, COMPARISON_TOO_LARGE, REVISION_SOURCE_HIDDEN,
 }
 
-class PageFailure(val error: PageError) : RuntimeException(error.name)
+open class PageFailure(val error: PageError) : RuntimeException(error.name)

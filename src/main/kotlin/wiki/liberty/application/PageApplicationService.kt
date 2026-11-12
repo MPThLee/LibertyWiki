@@ -4,15 +4,21 @@ package wiki.liberty.application
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import wiki.liberty.domain.ComparisonRevisionHidden
+import wiki.liberty.domain.ComparisonRevisionMissing
+import wiki.liberty.domain.ComparisonSide
+import wiki.liberty.domain.DiffResult
 import wiki.liberty.domain.Page
 import wiki.liberty.domain.PageError
 import wiki.liberty.domain.PageFailure
 import wiki.liberty.domain.PageLookup
 import wiki.liberty.domain.PageTitle
+import wiki.liberty.domain.RevisionComparison
 import wiki.liberty.domain.RevisionLookup
 import wiki.liberty.domain.RevisionMetadata
 import wiki.liberty.domain.RevisionPage
 import wiki.liberty.domain.RevisionSource
+import wiki.liberty.domain.WikitextDiff
 import wiki.liberty.domain.validUnicode
 import java.security.MessageDigest
 import java.time.Instant
@@ -58,14 +64,54 @@ data class RevisionHistory(
 
 @Service
 class PageApplicationService(private val repository: PageRepository, private val policy: PagePolicy) {
+    private val wikitextDiff = WikitextDiff()
+
     fun read(actor: PageActor, lookup: PageLookup): PageRead {
         requireRead(actor)
-        return find(lookup)
+        return find(lookup).also { result ->
+            if (actor == PageActor.ANONYMOUS && result.page?.sourceRestricted == true) {
+                throw PageFailure(PageError.REVISION_SOURCE_HIDDEN)
+            }
+        }
     }
 
     fun readRevision(actor: PageActor, lookup: RevisionLookup): RevisionSource {
         requireRead(actor)
-        return repository.findRevision(lookup) ?: throw PageFailure(PageError.REVISION_NOT_FOUND)
+        val revision = repository.findRevision(lookup) ?: throw PageFailure(PageError.REVISION_NOT_FOUND)
+        if (actor == PageActor.ANONYMOUS && revision.revision.sourceRestricted) {
+            throw PageFailure(PageError.REVISION_SOURCE_HIDDEN)
+        }
+        return revision.copy(revision = visibleMetadata(actor, revision.revision))
+    }
+
+    fun compareRevisions(actor: PageActor, from: RevisionLookup, to: RevisionLookup): RevisionComparison {
+        requireRead(actor)
+        val (fromRevision, toRevision) = repository.findRevisions(from, to)
+        val left = fromRevision ?: throw ComparisonRevisionMissing(ComparisonSide.FROM, from)
+        if (actor == PageActor.ANONYMOUS && left.revision.sourceRestricted) {
+            throw ComparisonRevisionHidden(ComparisonSide.FROM, from)
+        }
+        val right = toRevision ?: throw ComparisonRevisionMissing(ComparisonSide.TO, to)
+        if (actor == PageActor.ANONYMOUS && right.revision.sourceRestricted) {
+            throw ComparisonRevisionHidden(ComparisonSide.TO, to)
+        }
+        if (left.page.id != right.page.id) throw PageFailure(PageError.REVISION_PAGE_MISMATCH)
+        return when (val diff = wikitextDiff.compare(left.source, right.source)) {
+            is DiffResult.Success -> RevisionComparison(
+                left.copy(revision = visibleMetadata(actor, left.revision)),
+                right.copy(revision = visibleMetadata(actor, right.revision)),
+                diff.lines,
+            )
+            DiffResult.TooLarge -> throw PageFailure(PageError.COMPARISON_TOO_LARGE)
+        }
+    }
+
+    private fun visibleMetadata(actor: PageActor, revision: RevisionMetadata): RevisionMetadata {
+        if (actor == PageActor.OPERATOR) return revision
+        return revision.copy(
+            size = if (revision.sourceRestricted) null else revision.size,
+            delta = if (revision.sourceRestricted || revision.parentSourceRestricted) null else revision.delta,
+        )
     }
 
     fun revisionPage(actor: PageActor, lookup: PageLookup): RevisionPage {
@@ -96,10 +142,11 @@ class PageApplicationService(private val repository: PageRepository, private val
                 ?: repository.findHistoryAnchor(page, RevisionLookup.Id(page.currentRevisionId))
         } else null
         return RevisionHistory(
-            page, if (older) revisions else revisions.asReversed(), next,
+            page, (if (older) revisions else revisions.asReversed()).map { visibleMetadata(actor, it) },
+            next?.let { visibleMetadata(actor, it) },
             hasNewer = if (older) anchor != null && !request.inclusive else next != null,
             hasOlder = if (older) next != null else anchor != null,
-            current = current,
+            current = current?.let { visibleMetadata(actor, it) },
         )
     }
 
@@ -137,6 +184,9 @@ class PageApplicationService(private val repository: PageRepository, private val
         if (actor == PageActor.ANONYMOUS && !policy.anonymousEdit) throw PageFailure(PageError.FORBIDDEN)
         val revision = revision(actor, requestId, command.source, command.summary)
         val current = find(command.lookup).page ?: throw PageFailure(PageError.PAGE_NOT_FOUND)
+        if (actor == PageActor.ANONYMOUS && current.sourceRestricted) {
+            throw PageFailure(PageError.REVISION_SOURCE_HIDDEN)
+        }
         val currentBase = when (val base = command.base) {
             is RevisionBase.Native -> base.id == current.revisionId
             is RevisionBase.Compat -> base.id == current.compatRevisionId

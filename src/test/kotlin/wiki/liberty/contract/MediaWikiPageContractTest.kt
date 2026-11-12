@@ -51,6 +51,67 @@ class MediaWikiPageContractTest {
         assertThat(observeHistory(local, title)).isEqualTo(observeHistory(baseline, title))
     }
 
+    @Test
+    fun `compares stored Wikitext via Action and REST against MediaWiki 1_46_2 and Wikidiff2`() {
+        val baseline = baseline()
+        val local = ContractHttp("http://127.0.0.1:$port")
+        val title = "Compare ${UUID.randomUUID()}"
+        assertThat(observeComparison(local, title, allowCrossPageAction = false))
+            .isEqualTo(observeComparison(baseline, title, allowCrossPageAction = true))
+    }
+
+    private fun observeComparison(http: ContractHttp, title: String, allowCrossPageAction: Boolean): Map<String, Any> {
+        val from = http.actionCreate(title, "== 제목 ==\n가나다 old 끝\n").json.at("/edit/newrevid").asLong()
+        val to = http.actionEdit("title" to title, "== 제목 ==\n가나다 new 끝\n", from).json.at("/edit/newrevid").asLong()
+        val other = http.actionCreate("Other $title", "Other source").json.at("/edit/newrevid").asLong()
+        assertThat(listOf(from, to, other)).doesNotHaveDuplicates().allMatch { it > 0 }
+
+        val crossPage = http.actionCompare(from, other)
+        assertThat(crossPage.status).isEqualTo(200)
+        if (allowCrossPageAction) assertThat(crossPage.json.at("/compare/torevid").asLong()).isEqualTo(other)
+        else assertThat(crossPage.json.at("/error/code").asText()).isEqualTo("unsupported")
+
+        fun action(fromId: Long, toId: Long): String {
+            val result = http.actionCompare(fromId, toId)
+            assertThat(result.status).isEqualTo(200)
+            val comparison = result.json["compare"]
+            assertThat(comparison["fromrevid"].asLong()).isEqualTo(fromId)
+            assertThat(comparison["torevid"].asLong()).isEqualTo(toId)
+            assertThat(comparison["fromtitle"].asText()).isEqualTo(title)
+            val body = comparison["body"].asText()
+            if (fromId == toId) assertThat(body).isEmpty()
+            else assertThat(body).contains("<del", "<ins", "== 제목 ==")
+            return body
+        }
+
+        fun rest(fromId: Long, toId: Long): List<JsonNode> {
+            val result = http.restCompare(fromId, toId)
+            assertThat(result.status).isEqualTo(200)
+            assertThat(result.json.at("/from/id").asLong()).isEqualTo(fromId)
+            assertThat(result.json.at("/to/id").asLong()).isEqualTo(toId)
+            assertThat(result.json.at("/from/slot_role").asText()).isEqualTo("main")
+            assertThat(result.json.at("/to/slot_role").asText()).isEqualTo("main")
+            return listOf(result.json.at("/from/sections"), result.json.at("/to/sections"), result.json["diff"])
+        }
+
+        val missing = 9_999_999L
+        val actionMissing = http.actionCompare(from, missing)
+        assertThat(actionMissing.status).isEqualTo(200)
+        return mapOf(
+            "actionForward" to action(from, to),
+            "actionReverse" to action(to, from),
+            "actionIdentical" to action(from, from),
+            "actionMissing" to actionMissing.json["error"].select("code", "info"),
+            "actionMissingHeader" to actionMissing.header("MediaWiki-API-Error"),
+            "restForward" to rest(from, to),
+            "restReverse" to rest(to, from),
+            "restIdentical" to rest(from, from),
+            "restMissingFrom" to restError(http.restCompare(missing, to)),
+            "restMissingTo" to restError(http.restCompare(from, missing)),
+            "restCrossPage" to restError(http.restCompare(from, other)),
+        )
+    }
+
     private fun observeHistory(http: ContractHttp, title: String): Map<String, Any> {
         val first = http.actionCreate(title, "First source").json.at("/edit/newrevid").asLong()
         val second = http.actionEdit("title" to title, "Second source", first).json.at("/edit/newrevid").asLong()

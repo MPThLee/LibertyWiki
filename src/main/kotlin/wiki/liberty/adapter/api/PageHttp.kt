@@ -3,6 +3,7 @@ package wiki.liberty.adapter.api
 
 import com.fasterxml.jackson.core.StreamReadConstraints
 import com.fasterxml.jackson.core.JsonParser
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.cfg.CoercionAction
 import com.fasterxml.jackson.databind.cfg.CoercionInputShape
 import com.fasterxml.jackson.databind.type.LogicalType
@@ -13,9 +14,14 @@ import org.springframework.boot.autoconfigure.jackson.Jackson2ObjectMapperBuilde
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.http.MediaType
+import org.springframework.http.ResponseEntity
 import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
 import wiki.liberty.application.PageActor
+import wiki.liberty.domain.MAX_COMPARISON_OUTPUT_BYTES
+import wiki.liberty.domain.PageError
+import wiki.liberty.domain.PageFailure
 import java.security.MessageDigest
 import java.util.UUID
 
@@ -27,7 +33,7 @@ data class PageHttpSettings(
 )
 
 @Component
-class PageHttp(private val settings: PageHttpSettings) {
+class PageHttp(private val settings: PageHttpSettings, private val json: ObjectMapper) {
     fun actor(request: HttpServletRequest): PageActor {
         val header = request.getHeader("Authorization") ?: return PageActor.ANONYMOUS
         if (settings.operatorToken.isBlank() || !header.startsWith("Bearer ", ignoreCase = true) ||
@@ -36,6 +42,14 @@ class PageHttp(private val settings: PageHttpSettings) {
             throw InvalidCredentials()
         }
         return PageActor.OPERATOR
+    }
+
+    fun comparisonResponse(value: Any): ResponseEntity<ByteArray> {
+        // The engine bounds the input and diff before formatting. The wire limit also covers
+        // adapter-specific output such as REST sections, Action markup and JSON escaping.
+        val encoded = json.writeValueAsBytes(value)
+        if (encoded.size > MAX_COMPARISON_OUTPUT_BYTES) throw PageFailure(PageError.COMPARISON_TOO_LARGE)
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(encoded)
     }
 }
 

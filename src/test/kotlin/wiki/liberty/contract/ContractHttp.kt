@@ -48,6 +48,8 @@ internal class ContractHttp(private val base: String, private val scriptPath: St
 
     fun restHistory(title: String, auth: String? = null, query: String = "") = get("${restPage(title)}/history$query", auth)
     fun restRevision(id: Long, auth: String? = null) = get("$scriptPath/rest.php/v1/revision/$id", auth)
+    fun restCompare(from: Long, to: Long, auth: String? = null) =
+        get("$scriptPath/rest.php/v1/revision/$from/compare/$to", auth)
 
     fun restEdit(title: String, source: String, base: Long, token: String? = csrfToken, auth: String? = null): Result {
         val body = mutableMapOf<String, Any>("source" to source, "latest" to mapOf("id" to base), "comment" to "Edit summary")
@@ -59,6 +61,10 @@ internal class ContractHttp(private val base: String, private val scriptPath: St
 
     fun actionQuery(vararg params: Pair<String, String>, auth: String? = null) =
         get("$scriptPath/api.php?" + form(mapOf("action" to "query") + params), auth)
+
+    fun actionCompare(from: Long, to: Long, auth: String? = null) = get(
+        "$scriptPath/api.php?" + form(mapOf("action" to "compare", "fromrev" to "$from", "torev" to "$to")), auth,
+    )
 
     fun actionCreate(title: String, source: String, token: String = csrfToken, auth: String? = null): Result {
         val body = form(mapOf("action" to "edit", "title" to title, "text" to source,
