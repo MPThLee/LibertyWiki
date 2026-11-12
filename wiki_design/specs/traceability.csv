@@ -5,24 +5,24 @@ FR-SITE-003,Core,위키 통계,SiteConfig,P1,정해진 집계 시점과 최신�
 FR-SITE-004,Core,사이트 메시지·푸터,SiteConfig,P1,관리 권한이 없는 사용자는 메시지 수정이 불가능합니다.,TC-SITE-004,PLANNED,PRODUCT_1_0
 FR-SITE-005,Core,읽기 전용·점검 모드,SiteConfig,P0,API까지 동일하게 쓰기 금지가 적용됩니다.,TC-SITE-005,PLANNED,PRODUCT_1_0
 FR-PAGE-001,Core,문서 생성,Page,P0,동시 중복 생성 시 한 요청만 성공합니다.,TC-PAGE-001,PLANNED,PRODUCT_1_0
-FR-PAGE-002,Core,문서 조회,Page,P0,없는 페이지는 존재하지 않음 상태로 표시합니다.,TC-PAGE-002,PLANNED,PRODUCT_1_0
+FR-PAGE-002,Core,문서 조회,Page,P0,없는 페이지를 구분합니다. 숫자 문서 ID는 제목 변경 후에도 동일 문서를 가리키며 공개 범위 밖의 제목·ID·목적지는 노출되지 않습니다.,TC-PAGE-002,PLANNED,PRODUCT_1_0
 FR-PAGE-003,Core,문서 이동·이름 변경,Page,P0,이전 제목에 redirect가 만들어지고 대상 충돌은 거부됩니다.,TC-PAGE-003,PLANNED,PRODUCT_1_0
 FR-PAGE-004,Core,문서 삭제·복원,Page,P0,삭제/복원 전후 이력 불변 및 관리자 로그 생성.,TC-PAGE-004,PLANNED,PRODUCT_1_0
 FR-PAGE-005,Core,문서 보호,Page,P0,만료 전/후에 권한 검사가 정확히 변경됩니다.,TC-PAGE-005,PLANNED,PRODUCT_1_0
 FR-PAGE-006,Core,문서 정보,Page,P0,내용 접근 권한 없는 사용자에게 비공개 메타가 노출되지 않습니다.,TC-PAGE-006,PLANNED,PRODUCT_1_0
-FR-PAGE-007,Core,하위 문서,Page,P1,하위 문서 허용 여부에 따라 정상적으로 분기됩니다.,TC-PAGE-007,PLANNED,PRODUCT_1_0
-FR-PAGE-008,Core,문서 퍼머링크,Page,P0,새 편집 이후에도 동일 리비전을 재현합니다.,TC-PAGE-008,PLANNED,PRODUCT_1_0
+FR-PAGE-007,Core,하위 문서,Page,P1,"고정 프로파일에서 하위 문서 활성 여부, 상위 문서의 존재 여부, 읽기 권한에 따른 경로 표시를 비교합니다.",TC-PAGE-007,PLANNED,PRODUCT_1_0
+FR-PAGE-008,Core,문서 퍼머링크,Page,P0,후속 편집 이후에도 동일한 과거 원문 및 렌더링 판을 가리킵니다. 누락·비공개·숨김 리비전의 콘텐츠와 메타데이터 노출을 검사합니다.,TC-PAGE-008,PLANNED,PRODUCT_1_0
 FR-PAGE-009,Core,문서 대량 작업,Page,P1,부분 실패 항목과 재시도 가능한 결과를 제공합니다.,TC-PAGE-009,PLANNED,PRODUCT_1_0
 FR-PAGE-010,Core,문서 내보내기,Page,P1,export→import 후 수·내용·원본 출처가 비교 가능합니다.,TC-PAGE-010,PLANNED,PRODUCT_1_0
 FR-NS-001,Core,기본 이름공간,Namespace,P0,대표 기본 제목을 올바른 namespace ID로 해석합니다.,TC-NS-001,PLANNED,PRODUCT_1_0
 FR-NS-002,Core,사용자 정의 이름공간,Namespace,P1,예약 ID·동일 별칭 충돌을 거부합니다.,TC-NS-002,PLANNED,PRODUCT_1_0
 FR-NS-003,Core,제목 정규화,Namespace,P0,대표 충돌·Unicode 테스트 집합을 통과합니다.,TC-NS-003,PLANNED,PRODUCT_1_0
-FR-EDIT-001,Core,소스 편집,Revision,P0,"저장 성공 시 revision 추가, 직전 revision 유지.",TC-EDIT-001,PLANNED,PRODUCT_1_0
-FR-EDIT-002,Core,편집 충돌 방지,Revision,P0,동시에 같은 문서를 편집하면 무의식적 덮어쓰기가 없습니다.,TC-EDIT-002,PLANNED,PRODUCT_1_0
+FR-EDIT-001,Core,소스 편집,Revision,P0,"저장 성공 시 revision 추가, 직전 revision 유지. 저장 전 차이 보기는 초안·요약을 보존하고 리비전·감사·outbox에 쓰지 않습니다.",TC-EDIT-001,PLANNED,PRODUCT_1_0
+FR-EDIT-002,Core,편집 충돌 방지,Revision,P0,오래된 기준판으로 다른 편집을 덮어쓰지 않고 초안과 요약을 보존합니다. 차이 표시 및 충돌이 없는 변경의 병합 가능 조건은 기준 프로파일에서 검증합니다.,TC-EDIT-002,PLANNED,PRODUCT_1_0
 FR-EDIT-003,Core,편집 검증,Revision,P0,실패 시 어떠한 새 revision도 생성하지 않습니다.,TC-EDIT-003,PLANNED,PRODUCT_1_0
 FR-EDIT-004,Core,리비전 이력,Revision,P0,시간 역순 이력 및 페이지네이션이 정확합니다.,TC-EDIT-004,PLANNED,PRODUCT_1_0
 FR-EDIT-005,Core,리비전 차이,Revision,P0,삭제/삽입·한글·표·템플릿 예제가 구분 표시됩니다.,TC-EDIT-005,PLANNED,PRODUCT_1_0
-FR-EDIT-006,Core,되돌리기·취소,Revision,P0,원래 revision을 삭제하지 않고 새 revision이 추가됩니다.,TC-EDIT-006,PLANNED,PRODUCT_1_0
+FR-EDIT-006,Core,되돌리기·취소,Revision,P0,"원래 revision을 삭제하지 않고 새 revision이 추가됩니다. 기준 프로파일의 웹 롤백 확인 설정을 대조하고, 확인 취소 시 변경·감사·outbox가 생성되지 않음을 검증합니다.",TC-EDIT-006,PLANNED,PRODUCT_1_0
 FR-EDIT-007,Core,리비전 비공개 처리,Revision,P1,권한 없는 목록/API/검색/캐시에서 숨김 요소가 불가시합니다.,TC-EDIT-007,PLANNED,PRODUCT_1_0
 FR-EDIT-008,Core,다중 콘텐츠 슬롯,Revision,P1,slot별 독립 content ID/hash와 렌더 정책이 유지됩니다.,TC-EDIT-008,PLANNED,PRODUCT_1_0
 FR-EDIT-009,Core,자동저장·임시 초안,Revision,P1,새로고침 후 미저장 변경 복구를 사용자가 선택합니다.,TC-EDIT-009,PLANNED,PRODUCT_1_0
@@ -31,7 +31,7 @@ FR-EDIT-011,Core,시각편집기,Revision,P1,정의된 round-trip fixtures에서
 FR-PARSE-001,Core,Wikitext 기본 파서,Parser,P0,승인된 parser golden tests를 통과합니다.,TC-PARSE-001,PLANNED,PRODUCT_1_0
 FR-PARSE-002,Core,미리보기/렌더링,Parser,P0,동일 입력에서 일관된 의미와 서버 XSS 차단.,TC-PARSE-002,PLANNED,PRODUCT_1_0
 FR-PARSE-003,Core,템플릿 포함,Parser,P0,...}}` 구문과 중첩 transclusion을 제한된 평가 컨텍스트에서 처리합니다.,TC-PARSE-003,PLANNED,PRODUCT_1_0
-FR-PARSE-004,Core,파서 함수,Parser,P1,각 함수 정상·오류·중첩 fixtures 통과.,TC-PARSE-004,PLANNED,PRODUCT_1_0
+FR-PARSE-004,Core,파서 함수,Parser,P1,프로파일별 활성 함수 목록 및 선택적 문자열 함수 설정을 고정하고 각 함수의 정상·오류·중첩·제한 fixtures를 검증합니다.,TC-PARSE-004,PLANNED,PRODUCT_1_0
 FR-PARSE-005,Core,매직 워드,Parser,P1,환경 정보·시간대별 예상 값이 정확합니다.,TC-PARSE-005,PLANNED,PRODUCT_1_0
 FR-PARSE-006,Core,Parser AST/의존 그래프,Parser,P0,템플릿 수정 시 참조 페이지 무효화 작업이 생성됩니다.,TC-PARSE-006,PLANNED,PRODUCT_1_0
 FR-PARSE-007,Core,왕복 변환/부분 직렬화,Parser,P1,선택적 직렬화 테스트에서 미수정 토큰의 손실이 없습니다.,TC-PARSE-007,PLANNED,PRODUCT_1_0
@@ -47,7 +47,7 @@ FR-SEARCH-002,Core,고급 검색,Search,P1,쿼리 파서 유효성 검사 및 �
 FR-SEARCH-003,Core,비동기 색인,Search,P0,"일반 상황 검색 반영 60초 이내(제안), 장애 재시도.",TC-SEARCH-003,PLANNED,PRODUCT_1_0
 FR-SEARCH-004,Core,목록·특수 조회,Search,P1,특수 페이지 내 필터·정렬·페이지네이션 동작.,TC-SEARCH-004,PLANNED,PRODUCT_1_0
 FR-SEARCH-005,Core,검색 장애 격리,Search,P0,검색 장애 주입 시 문서 읽기·저장이 성공합니다.,TC-SEARCH-005,PLANNED,PRODUCT_1_0
-FR-AUTH-001,Core,회원 가입·로그인,Identity,P0,계정 확인 및 인증 오류가 안전하게 처리됩니다.,TC-AUTH-001,PLANNED,PRODUCT_1_0
+FR-AUTH-001,Core,회원 가입·로그인,Identity,P0,계정 확인 및 인증 오류를 안전하게 처리합니다. 로그인 편집 도중 세션이 만료되면 저장을 중지하고 재로그인을 안내합니다. 초안과 요약이 남으며 익명 저장이나 자동 재제출이 발생하지 않습니다.,TC-AUTH-001,PLANNED,PRODUCT_1_0
 FR-AUTH-002,Core,사용자 그룹·권한,Identity,P0,허가되지 않은 delete/protect/userrights 등 403.,TC-AUTH-002,PLANNED,PRODUCT_1_0
 FR-AUTH-003,Core,차단·해제,Identity,P0,차단 중 수정·업로드·이동이 허가 정책에 따라 거부됩니다.,TC-AUTH-003,PLANNED,PRODUCT_1_0
 FR-AUTH-004,Core,사용자 기여,Identity,P0,사용자별 편집·로그 이력과 일치합니다.,TC-AUTH-004,PLANNED,PRODUCT_1_0
@@ -57,14 +57,14 @@ FR-AUTH-007,Core,인증 외부 연동,Identity,P1,IdP 장애·계정 중복·권
 FR-AUTH-008,Core,Bot·API 계정,Identity,P1,토큰 폐기 후 API 호출이 즉시 거부됩니다.,TC-AUTH-008,PLANNED,PRODUCT_1_0
 FR-AUTH-009,Core,사용자 이름 변경,Identity,P1,변경 후 과거 기여의 참조가 끊기지 않습니다.,TC-AUTH-009,PLANNED,PRODUCT_1_0
 FR-AUTH-010,Core,관리 특권 변경,Identity,P0,권한 상승 시도에 네거티브 테스트 통과.,TC-AUTH-010,PLANNED,PRODUCT_1_0
-FR-TALK-001,Core,토론 문서,Activity,P0,원문서와 토론 간 이동이 가능합니다.,TC-TALK-001,PLANNED,PRODUCT_1_0
+FR-TALK-001,Core,토론 문서,Activity,P0,본문과 토론 간 양방향 이동을 일반 문서와 사용자 문서에서 검증합니다. 접근 권한을 각 대상에 적용합니다.,TC-TALK-001,PLANNED,PRODUCT_1_0
 FR-TALK-002,Core,토론 주제·답글,Activity,P1,중첩·충돌·완료 댓글의 저장 결과가 정확합니다.,TC-TALK-002,PLANNED,PRODUCT_1_0
 FR-WATCH-001,Core,주시문서,Activity,P0,다른 사용자에게 내 감시 목록이 노출되지 않습니다.,TC-WATCH-001,PLANNED,PRODUCT_1_0
 FR-WATCH-002,Core,최근 변경,Activity,P0,편집 직후 최근 변경에 원자적·비동기 일치 규칙대로 반영.,TC-WATCH-002,PLANNED,PRODUCT_1_0
 FR-WATCH-003,Core,알림,Activity,P1,알림 대상·읽음 상태·접근 권한을 유지합니다.,TC-WATCH-003,PLANNED,PRODUCT_1_0
 FR-WATCH-004,Core,이메일 알림,Activity,P1,발송 장애는 편집 저장 성공에 영향을 주지 않습니다.,TC-WATCH-004,PLANNED,PRODUCT_1_0
 FR-WATCH-005,Core,순찰(Patrol),Activity,P1,검토 행위의 작성자/시각이 별도 기록됩니다.,TC-WATCH-005,PLANNED,PRODUCT_1_0
-FR-FILE-001,Core,파일 업로드,File,P0,트랜잭션 실패 시 정리 큐가 고아 객체를 처리합니다.,TC-FILE-001,PLANNED,PRODUCT_1_0
+FR-FILE-001,Core,파일 업로드,File,P0,두 백엔드에서 업로드·조회와 권한을 검증하고 트랜잭션 실패 시 정리 큐가 고아 파일을 처리하는지 확인합니다.,TC-FILE-001,PLANNED,PRODUCT_1_0
 FR-FILE-002,Core,파일 이름·중복 처리,File,P0,동일 이름 업로드가 이력 보존 정책대로 동작합니다.,TC-FILE-002,PLANNED,PRODUCT_1_0
 FR-FILE-003,Core,파일 설명 문서,File,P0,파일/설명 본문 수정 이력이 독립적으로 유지됩니다.,TC-FILE-003,PLANNED,PRODUCT_1_0
 FR-FILE-004,Core,파일 버전·복구,File,P1,복구 이후 SHA-256과 파일 URL이 확인됩니다.,TC-FILE-004,PLANNED,PRODUCT_1_0
@@ -79,7 +79,7 @@ FR-ADMIN-004,Core,CAPTCHA·남용 방지,Security,P1,자동화 정책 예외와 
 FR-ADMIN-005,Core,로그인 보안 경보,Security,P1,계정별 보안 알림 설정과 기록이 일치합니다.,TC-ADMIN-005,PLANNED,PRODUCT_1_0
 FR-ADMIN-006,Core,차단 목록,Security,P1,규칙 우선순위·정규식 시간 제한이 검증됩니다.,TC-ADMIN-006,PLANNED,PRODUCT_1_0
 FR-ADMIN-007,Core,2단계 인증,Security,P1,"복구 코드 일회성, TOTP 재사용 방지 통과.",TC-ADMIN-007,PLANNED,PRODUCT_1_0
-FR-ADMIN-008,Core,특권 검사관 기능,Security,P2,"민감정보 노출 제한, 별도 권한·보존기간 검증.",TC-ADMIN-008,PLANNED,PRODUCT_1_0
+FR-ADMIN-008,Core,특권 검사관 기능,Security,P2,초기 조회와 추가 계정·IP 조회마다 사유와 감사 이벤트를 확인합니다. 검사·로그 권한을 각각 검증하고 권한이 없는 경로에서 민감정보를 차단합니다. 보존기간 만료를 검증합니다.,TC-ADMIN-008,PLANNED,PRODUCT_1_0
 FR-API-001,Core,네이티브 REST API,API,P0,OpenAPI 스키마 검증 및 입력 오류를 구조화합니다.,TC-API-001,PLANNED,PRODUCT_1_0
 FR-API-002,Core,MediaWiki Action API 어댑터,API,P1,동일 fixture에 필드·상태·오류 의미 일치.,TC-API-002,PLANNED,PRODUCT_1_0
 FR-API-003,Core,API 인증·쿼터,API,P0,권한·만료·초과 요청에서 표준 오류 반환.,TC-API-003,PLANNED,PRODUCT_1_0
@@ -99,7 +99,7 @@ FR-OPS-004,Core,설치·업그레이드,Operations,P1,업그레이드 전후 smo
 FR-OPS-005,Core,보존·영구 삭제 정책,Operations,P1,불변 역사 원칙과 법적 삭제 요구의 우선순위가 명확합니다.,TC-OPS-005,PLANNED,PRODUCT_1_0
 EXT-001,Bundled extension 1.46,AbuseFilter,AbuseFilter,P1,"경고/차단/태그, 오탐, 시간 초과, 규칙 비공개 테스트",TC-EXT-001,PLANNED,PRODUCT_1_0
 EXT-002,Bundled extension 1.46,CategoryTree,CategoryTree,P1,상하위·수천 노드 로딩/순환 차단,TC-EXT-002,PLANNED,PRODUCT_1_0
-EXT-003,Bundled extension 1.46,CheckUser,CheckUser,P2,일반 운영자도 민감정보 무단 열람 불가,TC-EXT-003,PLANNED,PRODUCT_1_0
+EXT-003,Bundled extension 1.46,CheckUser,CheckUser,P2,"조사 및 양방향 추가 조회별 감사, 검사와 로그의 별도 권한, 비인가 사용자 차단 및 보존기간",TC-EXT-003,PLANNED,PRODUCT_1_0
 EXT-004,Bundled extension 1.46,Cite,Cite,P1,동일 각주 재사용·중첩·미완성 태그,TC-EXT-004,PLANNED,PRODUCT_1_0
 EXT-005,Bundled extension 1.46,CiteThisPage,CiteThisPage,P1,인용 문자열에 정확한 영구 링크·수정일 표기,TC-EXT-005,PLANNED,PRODUCT_1_0
 EXT-006,Bundled extension 1.46,CodeEditor,CodeEditor,P1,키보드/IME/에러 표시 일치,TC-EXT-006,PLANNED,PRODUCT_1_0
@@ -111,12 +111,12 @@ EXT-011,Bundled extension 1.46,ImageMap,ImageMap,P1,다각형/사각형/원과 �
 EXT-012,Bundled extension 1.46,InputBox,InputBox,P1,페이지 생성·검색 이동·입력값 필터,TC-EXT-012,PLANNED,PRODUCT_1_0
 EXT-013,Bundled extension 1.46,Linter,Linter,P1,구문 오류 위치/심각도/수정 후 갱신,TC-EXT-013,PLANNED,PRODUCT_1_0
 EXT-014,Bundled extension 1.46,LoginNotify,LoginNotify,P1,오인 통지 억제·계정별 설정,TC-EXT-014,PLANNED,PRODUCT_1_0
-EXT-015,Bundled extension 1.46,Math,Math,P1,무한 처리·악성 매크로 차단·접근성 수식 대체,TC-EXT-015,PLANNED,PRODUCT_1_0
+EXT-015,Bundled extension 1.46,Math,Math,P1,"프로파일별 서버 변환 결과·브라우저 접근성, 무한 처리·악성 매크로 차단",TC-EXT-015,PLANNED,PRODUCT_1_0
 EXT-016,Bundled extension 1.46,MultimediaViewer,MultimediaViewer,P1,모바일/접근성/파일 권한 검증,TC-EXT-016,PLANNED,PRODUCT_1_0
 EXT-017,Bundled extension 1.46,Nuke,Nuke,P1,최대 건수 제한·부분실패/실행 로그,TC-EXT-017,PLANNED,PRODUCT_1_0
 EXT-018,Bundled extension 1.46,OATHAuth,OATHAuth,P1,OTP 회전/재사용 방지·백업코드 폐기,TC-EXT-018,PLANNED,PRODUCT_1_0
 EXT-019,Bundled extension 1.46,PageImages,PageImages,P1,이미지 변경 시 문서 썸네일 갱신,TC-EXT-019,PLANNED,PRODUCT_1_0
-EXT-020,Bundled extension 1.46,ParserFunctions,ParserFunctions,P1,함수별 Golden tests/에러·리소스 제한,TC-EXT-020,PLANNED,PRODUCT_1_0
+EXT-020,Bundled extension 1.46,ParserFunctions,ParserFunctions,P1,"활성 함수 전수와 문자열 함수의 구성 차이, 함수별 정상·오류·중첩·자원 제한",TC-EXT-020,PLANNED,PRODUCT_1_0
 EXT-021,Bundled extension 1.46,PdfHandler,PdfHandler,P1,큰 PDF/암호화/손상 파일 fallback,TC-EXT-021,PLANNED,PRODUCT_1_0
 EXT-022,Bundled extension 1.46,Poem,Poem,P1,빈 줄·공백·마크업 속성 보존,TC-EXT-022,PLANNED,PRODUCT_1_0
 EXT-023,Bundled extension 1.46,Replace Text,Replace Text,P1,선택/전후 diff/실패 재개/권한 검사,TC-EXT-023,PLANNED,PRODUCT_1_0
@@ -125,12 +125,12 @@ EXT-025,Bundled extension 1.46,SecureLinkFixer,SecureLinkFixer,P1,unsafe redirec
 EXT-026,Bundled extension 1.46,SpamBlacklist,SpamBlacklist,P1,악성 URL 차단/예외/패턴 타임아웃,TC-EXT-026,PLANNED,PRODUCT_1_0
 EXT-027,Bundled extension 1.46,SyntaxHighlight,SyntaxHighlight,P1,언어 자동 감지/코드 인젝션 차단,TC-EXT-027,PLANNED,PRODUCT_1_0
 EXT-028,Bundled extension 1.46,TemplateData,TemplateData,P1,필수·별칭·타입·기본값 폼/검증,TC-EXT-028,PLANNED,PRODUCT_1_0
-EXT-029,Bundled extension 1.46,TemplateStyles,TemplateStyles,P1,외부 URL/위험 CSS 제한·범위 격리,TC-EXT-029,PLANNED,PRODUCT_1_0
+EXT-029,Bundled extension 1.46,TemplateStyles,TemplateStyles,P1,"스코프 격리, CSS 경로별 허용 URL과 차단 URL 및 비공개 이미지 접근",TC-EXT-029,PLANNED,PRODUCT_1_0
 EXT-030,Bundled extension 1.46,TextExtracts,TextExtracts,P1,테이블/각주/템플릿 제거 정책 및 접근권한,TC-EXT-030,PLANNED,PRODUCT_1_0
 EXT-031,Bundled extension 1.46,Thanks,Thanks,P1,중복 감사 방지·알림 수신,TC-EXT-031,PLANNED,PRODUCT_1_0
 EXT-032,Bundled extension 1.46,TitleBlacklist,TitleBlacklist,P1,금지 제목 생성·이동·사용자 등록 거부,TC-EXT-032,PLANNED,PRODUCT_1_0
-EXT-033,Bundled extension 1.46,VisualEditor,VisualEditor,P1,"링크·표·인용·템플릿 왕복 테스트, 소스 변환 경고",TC-EXT-033,PLANNED,PRODUCT_1_0
-EXT-034,Bundled extension 1.46,WikiEditor,WikiEditor,P0,"툴바 명령, 키보드, 미리보기",TC-EXT-034,PLANNED,PRODUCT_1_0
+EXT-033,Bundled extension 1.46,VisualEditor,VisualEditor,P1,"링크·표·인용·틀 왕복, 소스 변환 경고, 기준 구성의 파일 업로드·삽입과 권한 거부",TC-EXT-033,PLANNED,PRODUCT_1_0
+EXT-034,Bundled extension 1.46,WikiEditor,WikiEditor,P0,"툴바·키보드·미리보기, 기준 구성의 파일 업로드·삽입, 줄바꿈·표 삽입",TC-EXT-034,PLANNED,PRODUCT_1_0
 FR-COMP-001,Core,Action API 완전 호환,Compatibility,GA_REQUIRED_UNSCHEDULED,baseline의 외부 관찰 가능 endpoint+parameter inventory 전 항목 계약 시험 합격,TC-COMP-001,PLANNED,PRODUCT_1_0
 FR-COMP-002,Core,REST API 완전 호환,Compatibility,GA_REQUIRED_UNSCHEDULED,baseline REST inventory 전 항목 성공·실패·권한 시험 합격,TC-COMP-002,PLANNED,PRODUCT_1_0
 FR-COMP-003,Core,Wikitext 정밀 호환,Compatibility,GA_REQUIRED_UNSCHEDULED,기능별 canonical fixtures·랜덤 차등 시험·유효 문서 실측에서 승인되지 않은 차이 0,TC-COMP-003,PLANNED,PRODUCT_1_0
@@ -142,9 +142,9 @@ FR-STORE-001,Core,로컬 파일 저장,Storage,GA_REQUIRED_UNSCHEDULED,메타/�
 FR-STORE-002,Core,S3 호환 저장,Storage,GA_REQUIRED_UNSCHEDULED,Garage/MinIO 등 별도 검증 프로파일과 실패 시나리오 통과,TC-STORE-002,PLANNED,PRODUCT_1_0
 FR-STORE-003,Core,저장소 독립 서빙,Storage,GA_REQUIRED_UNSCHEDULED,원본과 썸네일 HTTP 의미론·비공개 접근·range 일치,TC-STORE-003,PLANNED,PRODUCT_1_0
 FR-STORE-004,Core,저장소 무중단 이전,Storage,GA_REQUIRED_UNSCHEDULED,"파일/메타 해시 불일치 0, 이전 중 열람/쓰기 정합성, 리허설 통과",TC-STORE-004,PLANNED,PRODUCT_1_0
-FR-EXT-001,Core,신규 확장 시스템,Extension,GA_REQUIRED_UNSCHEDULED,hello-world 확장과 권한·장애·롤백 시험 통과,TC-EXT-001,PLANNED,PRODUCT_1_0
-FR-EXT-002,Core,확장 격리,Extension,GA_REQUIRED_UNSCHEDULED,"확장 실패 시 핵심 API 생존, 권한 상승·DB 직접 접근·서명 검증 우회 0",TC-EXT-002,PLANNED,PRODUCT_1_0
-FR-EXT-003,Core,확장 Wikitext/API 훅,Extension,GA_REQUIRED_UNSCHEDULED,개별 확장 설치/제거·네 DB 지원·공개 SPI·리소스 회수와 설정/데이터/원문 보존 검증; 영구 삭제는 별도 관리 작업,TC-EXT-003,PLANNED,PRODUCT_1_0
+FR-EXT-001,Core,신규 확장 시스템,Extension,GA_REQUIRED_UNSCHEDULED,hello-world 확장과 권한·장애·롤백 시험 통과,TC-EXT-PLATFORM-001,PLANNED,PRODUCT_1_0
+FR-EXT-002,Core,확장 격리,Extension,GA_REQUIRED_UNSCHEDULED,"확장 실패 시 핵심 API 생존, 권한 상승·DB 직접 접근·서명 검증 우회 0",TC-EXT-PLATFORM-002,PLANNED,PRODUCT_1_0
+FR-EXT-003,Core,확장 Wikitext/API 훅,Extension,GA_REQUIRED_UNSCHEDULED,개별 확장 설치/제거·네 DB 지원·공개 SPI·리소스 회수와 설정/데이터/원문 보존 검증; 영구 삭제는 별도 관리 작업,TC-EXT-PLATFORM-003,PLANNED,PRODUCT_1_0
 FR-SCALE-001,Core,영어 위키백과급 용량,Capacity,FUTURE_CAPACITY_CERTIFICATION,크기/읽기/쓰기/검색/재색인/백업 프로파일별 합격 증거 제출,TC-SCALE-001,PLANNED,ENWIKI_CERTIFICATION
 FR-SCALE-002,Core,수평 확장/장애 격리,Capacity,FUTURE_CAPACITY_CERTIFICATION,multi-node 부하/rolling deploy/장애복구 동안 무손실 유지,TC-SCALE-002,PLANNED,ENWIKI_CERTIFICATION
 FR-LIC-001,Core,AGPL 배포 의무,Provenance,GA_REQUIRED_UNSCHEDULED,"사용자/네트워크 이용자 경로에서 원본 소스 제공 안내 확인, 법률 검토 승인",TC-LIC-001,PLANNED,PRODUCT_1_0
@@ -196,3 +196,24 @@ NFR-A11Y-001,NON_FUNCTIONAL,주요 경로 WCAG 2.2 AA,Validation,UNSCHEDULED,axe
 NFR-I18N-001,NON_FUNCTIONAL,ko/en/ja + 1개 RTL 언어 UI,Validation,UNSCHEDULED,날짜/시간/복수형/IME/RTL 테스트,TC-NFR-I18N-001,PLANNED,PRODUCT_1_0
 NFR-MAINT-001,NON_FUNCTIONAL,1회 배포를 위한 schema 변경 롤백 계획 보유,Validation,UNSCHEDULED,사전 백업·마이그레이션 리허설,TC-NFR-MAINT-001,PLANNED,PRODUCT_1_0
 NFR-OPS-001,NON_FUNCTIONAL,모든 업무 요청 traceId 추적 가능,Validation,UNSCHEDULED,로그·트레이스·Outbox 연결 검사,TC-NFR-OPS-001,PLANNED,PRODUCT_1_0
+FR-UX-001,사용자 범위 결정 Q1,통합 관리·특수 페이지 탐색,SiteConfig,UNSCHEDULED,권한별 화면·설정 요약·직접 URL을 비교합니다. 허용된 변경만 검증·감사되며 즉시 적용과 재시작 필요 설정이 구분됩니다. 키보드와 모바일에서 분류·필터·보기 전환을 사용합니다.,TC-UX-001,PLANNED,FOLLOW_UP_PRODUCT
+FR-UX-002,사용자 범위 결정 Q1,편집 중 표시,Revision,UNSCHEDULED,두 브라우저에서 편집을 시작·종료하거나 접속이 끊겼을 때 표시·만료를 확인합니다. 편집 잠금과 추가 리비전이 생기지 않으며 비공개 문서·개별 편집자 정보가 권한 밖으로 노출되지 않습니다.,TC-UX-002,PLANNED,FOLLOW_UP_PRODUCT
+FR-UX-003,사용자 범위 결정 Q1,최근 변경의 롤백 확인,Revision,UNSCHEDULED,확인과 취소를 모바일·키보드로 실행합니다. 취소하면 변경이 없고 확인하면 권한·동시성을 다시 검증해 기존 롤백 결과가 한 번만 생성됩니다.,TC-UX-003,PLANNED,FOLLOW_UP_PRODUCT
+FR-UX-004,사용자 범위 결정 Q1,최근 변경의 차이 미리보기,RecentChanges,UNSCHEDULED,추가·삭제·요약뿐인 행을 구분하고 두 리비전의 읽기 권한을 재확인합니다. 숨김 또는 누락판의 내용이 화면·캐시에 노출되지 않으며 조회로 저장 상태가 바뀌지 않습니다.,TC-UX-004,PLANNED,FOLLOW_UP_PRODUCT
+FR-UX-005,사용자 범위 결정 Q1,편집 화면의 저장 전 차이 탭,Revision,UNSCHEDULED,모드를 전환해도 원문·요약·기준판을 보존합니다. 저장 전 조회에서 리비전·감사·outbox는 생성되지 않고 기준판 권한은 비교 시점에 검증합니다.,TC-UX-005,PLANNED,FOLLOW_UP_PRODUCT
+FR-UX-006,사용자 범위 결정 Q1,세션 만료 뒤 편집 이어가기,Identity,UNSCHEDULED,익명 편집이 허용된 사이트에서도 만료된 저장은 거부됩니다. 재인증 뒤 초안·요약을 확인하고 사용자 요청으로만 재제출하며 현재 권한·기준판 충돌을 다시 검사합니다.,TC-UX-006,PLANNED,FOLLOW_UP_PRODUCT
+FR-UX-007,사용자 범위 결정 Q1,편집기의 간편 이미지 업로드,Media,UNSCHEDULED,허용된 파일의 성공·중복·취소·실패·권한 거부를 확인합니다. 성공한 파일만 참조하고 실패해도 초안을 복구할 수 있으며 업로드와 문서 저장의 각각의 권한·효과를 검증합니다.,TC-UX-007,PLANNED,FOLLOW_UP_PRODUCT
+FR-UX-008,사용자 범위 결정 Q1,원본 편집기의 시각적 표 편집,Editor,UNSCHEDULED,"셀 수정·병합, 취소, 표현 불가 입력을 시험합니다. 변경한 셀의 의미와 주변 미수정 원문을 보존하고 손실 없이 변환할 수 없는 경우 초안을 보존합니다.",TC-UX-008,PLANNED,FOLLOW_UP_PRODUCT
+FR-UX-009,사용자 범위 결정 Q1,편집기 대체 마크업·단축 입력,Editor,UNSCHEDULED,"전환 전후 의미, 미수정 원문, 지원하지 않는 구문, 취소, 한국어 IME를 검증합니다. 변환은 초안에 적용하며 저장된 문법과 호환 렌더링은 고정 기준으로 비교합니다.",TC-UX-009,PLANNED,FOLLOW_UP_PRODUCT
+FR-ADDON-001,사용자 범위 결정 Q2,지도 삽입,Rendering,UNSCHEDULED,"허용·거부 제공자, 입력 오류, 모바일 접근성, 제공자 장애와 확장 비활성화 후 원문 보존을 확인합니다. 임의 iframe을 허용하는 경로가 생기지 않습니다.",TC-ADDON-001,PLANNED,OPTIONAL_EXTENSION
+FR-ADDON-002,사용자 범위 결정 Q2,외부 영상 삽입,Media,UNSCHEDULED,"모바일 재생, 접근 가능한 조작, 미지원 형식, 승인되지 않은 호스트 및 제공자 장애를 시험합니다. 외부 연결 실패 시 문서 원문과 읽기 기능을 보존합니다.",TC-ADDON-002,PLANNED,OPTIONAL_EXTENSION
+FR-ADDON-003,사용자 범위 결정 Q2,사용자프로필 확장,Identity,UNSCHEDULED,권한별 공개 필드·기여 링크·존재하지 않는 계정·비공개 관리 기록을 검증합니다. 기존 사이트 URL에 의존하는 경우 이전 프로파일에서 별칭을 시험합니다.,TC-ADDON-003,PLANNED,OPTIONAL_EXTENSION
+FR-ADDON-004,사용자 범위 결정 Q2,스포일러 공개 확인,Rendering,UNSCHEDULED,키보드·보조기기·모바일에서 확인·취소와 접힘 상태를 시험합니다. 문서 권한은 공개 조작과 별도로 적용하며 확장 비활성화 후 원문을 보존합니다.,TC-ADDON-004,PLANNED,OPTIONAL_EXTENSION
+FR-ADDON-005,사용자 범위 결정 Q2,구조화된 투표,Discussion,UNSCHEDULED,"참여 권한, 중복 요청, 마감 뒤 제출, 결과의 공개 범위와 감사·확장 제거 후 기록 보존을 검증합니다.",TC-ADDON-005,PLANNED,OPTIONAL_EXTENSION
+FR-ADDON-006,사용자 범위 결정 Q2,본문에서 진행 중 토론 표시,Discussion,UNSCHEDULED,"열린·닫힌 토론, 모바일, 토론 문서로 이동, 표시 설정 및 읽기 권한을 검증합니다. 비공개 토론의 존재와 내용이 노출되지 않습니다.",TC-ADDON-006,PLANNED,OPTIONAL_EXTENSION
+FR-ADDON-007,사용자 범위 결정 Q2,분류 별칭 처리,Category,UNSCHEDULED,정상·누락·순환·비공개 목적지를 시험합니다. 확장 설정 밖의 호환 분류 멤버십을 비교하고 기존 리비전은 보존합니다.,TC-ADDON-007,PLANNED,OPTIONAL_EXTENSION
+FR-ADDON-008,사용자 범위 결정 Q2,하위 문서 넘겨주기,LinkGraph,UNSCHEDULED,"명시적 페이지 우선, 누락 대상, 순환·길이 제한, 대상 읽기 권한 및 확장 비활성 상태의 기준 동작을 확인합니다.",TC-ADDON-008,PLANNED,OPTIONAL_EXTENSION
+FR-ADDON-009,사용자 범위 결정 Q2,문서별 상위 링크 숨김,Rendering,UNSCHEDULED,"이름공간 설정과 기존·누락 상위 문서의 경로, 문서별 설정 적용·해제, 확장 비활성화 후 원문을 검증합니다.",TC-ADDON-009,PLANNED,OPTIONAL_EXTENSION
+FR-ADDON-010,사용자 범위 결정 Q2,URL 변수의 파서 입력,Rendering,UNSCHEDULED,"누락·유효하지 않은 값, 이스케이프, 허용되지 않은 변수, 다른 변수값과 사용자·권한 간 캐시 분리 및 민감 값 비노출을 검증합니다.",TC-ADDON-010,PLANNED,OPTIONAL_EXTENSION
+FR-ADDON-011,사용자 범위 결정 Q2,오프라인 단일 HTML 내보내기,Export,UNSCHEDULED,네트워크를 끈 상태에서 문서와 내부 링크·포함 파일을 열고 출처·저작자 표시를 확인합니다. 포함 범위·순환·접근 거부·크기 한도·실패 재시도를 검증합니다.,TC-ADDON-011,PLANNED,OPTIONAL_EXTENSION
+FR-ADDON-012,사용자 범위 결정 Q2,렌더링 텍스트 검색과 선택적 원문 색인,Search,UNSCHEDULED,"원문 전용 구문, 틀 전개 텍스트, 선택 설정 전환·재색인, 권한 철회·강조·결과 수를 검증합니다. 고정 호환 프로파일의 기존 검색 동작을 비교합니다.",TC-ADDON-012,PLANNED,OPTIONAL_EXTENSION

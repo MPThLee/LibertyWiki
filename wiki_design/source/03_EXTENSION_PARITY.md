@@ -14,7 +14,7 @@
 |---|---|---|---|---|---|
 | EXT-001 | **AbuseFilter** | 변수 기반 편집 필터·경고·차단·태그·로그 | Filter DSL→AST 검증 후 저장 트랜잭션 전 평가; rule execution budget | 경고/차단/태그, 오탐, 시간 초과, 규칙 비공개 테스트 | P1 |
 | EXT-002 | **CategoryTree** | 카테고리 트리 동적 탐색 | 카테고리 그래프 조회 + 지연 로딩 + 순환 방지 | 상하위·수천 노드 로딩/순환 차단 | P1 |
-| EXT-003 | **CheckUser** | 계정·IP 연관 조사 및 감사 | 별도 PII 저장소·검사관 전용 권한·목적 제한·로그 | 일반 운영자도 민감정보 무단 열람 불가 | P2 |
+| EXT-003 | **CheckUser** | 계정·IP 연관 조사 및 감사 | 별도 PII 저장소·검사관 전용 권한·목적 제한·복수 계정/IP 비교·로그 | 조사 및 양방향 추가 조회별 감사, 검사와 로그의 별도 권한, 비인가 사용자 차단 및 보존기간 | P2 |
 | EXT-004 | **Cite** | `<ref>`·`<references>` 인용/각주 | 파서 인용 AST, 재사용/명명된 각주와 문헌 목록 | 동일 각주 재사용·중첩·미완성 태그 | P1 |
 | EXT-005 | **CiteThisPage** | 문서 인용 형식·고정 리비전 표기 | 문서 metadata→인용 서지정보 생성 | 인용 문자열에 정확한 영구 링크·수정일 표기 | P1 |
 | EXT-006 | **CodeEditor** | CSS/JS/JSON 코드 편집 IDE | 구문 하이라이트·lint·자동완성·탭 지원 | 키보드/IME/에러 표시 일치 | P1 |
@@ -26,12 +26,12 @@
 | EXT-012 | **InputBox** | 페이지 생성·검색 입력 위젯 | 제한된 폼 선언과 액션 리졸버 | 페이지 생성·검색 이동·입력값 필터 | P1 |
 | EXT-013 | **Linter** | 문법 오류 진단/문서 관리 | 파서 진단 수집 + 특수 목록 | 구문 오류 위치/심각도/수정 후 갱신 | P1 |
 | EXT-014 | **LoginNotify** | 신규 기기·의심 로그인 통지 | 새 IP/기기 감지 + 개인정보 최소 수집 | 오인 통지 억제·계정별 설정 | P1 |
-| EXT-015 | **Math** | TeX 수식 렌더링 | 허용된 TeX subset → MathML/SVG sandbox | 무한 처리·악성 매크로 차단·접근성 수식 대체 | P1 |
+| EXT-015 | **Math** | TeX 수식 렌더링 | 허용된 TeX subset → MathML/SVG sandbox | 프로파일별 서버 변환 결과·브라우저 접근성, 무한 처리·악성 매크로 차단 | P1 |
 | EXT-016 | **MultimediaViewer** | 이미지 확대·메타데이터 라이트박스 | 모달 뷰어·키보드/이전/다음·메타데이터 | 모바일/접근성/파일 권한 검증 | P1 |
 | EXT-017 | **Nuke** | 사용자 일괄 생성 문서 삭제 | 범위 미리보기→승인→비동기 소프트 삭제 | 최대 건수 제한·부분실패/실행 로그 | P1 |
 | EXT-018 | **OATHAuth** | OTP/TOTP 2단계 인증 | TOTP 검증·복구 코드·관리 정책 | OTP 회전/재사용 방지·백업코드 폐기 | P1 |
 | EXT-019 | **PageImages** | 문서 대표 이미지 추출 | 문서 렌더 AST에서 대표 이미지 선정 | 이미지 변경 시 문서 썸네일 갱신 | P1 |
-| EXT-020 | **ParserFunctions** | 조건문·식·문자/시간 함수 | Wikitext ParserFunctionRegistry | 함수별 Golden tests/에러·리소스 제한 | P1 |
+| EXT-020 | **ParserFunctions** | 조건문·식·문자/시간 함수 | Wikitext ParserFunctionRegistry | 활성 함수 전수와 문자열 함수의 구성 차이, 함수별 정상·오류·중첩·자원 제한 | P1 |
 | EXT-021 | **PdfHandler** | PDF 파일 미리보기/페이지 썸네일 | 별도 PDF 렌더 worker 제한된 샌드박스 | 큰 PDF/암호화/손상 파일 fallback | P1 |
 | EXT-022 | **Poem** | 시와 줄바꿈 태그 렌더링 | `<poem>` parser plugin | 빈 줄·공백·마크업 속성 보존 | P1 |
 | EXT-023 | **Replace Text** | 대량 본문 정규식 치환 | dry-run diff + batch mutation + undo 지점 | 선택/전후 diff/실패 재개/권한 검사 | P1 |
@@ -40,12 +40,12 @@
 | EXT-026 | **SpamBlacklist** | 스팸 URL 패턴 목록 검사 | 최적화된 Regex/Trie, 허용 목록 우선순위 | 악성 URL 차단/예외/패턴 타임아웃 | P1 |
 | EXT-027 | **SyntaxHighlight** | 문서 코드블록 구문 강조 | highlight worker 또는 클라이언트 렌더 | 언어 자동 감지/코드 인젝션 차단 | P1 |
 | EXT-028 | **TemplateData** | 템플릿 변수 메타데이터 | TemplateData JSON 검증·에디터 dialog 동기화 | 필수·별칭·타입·기본값 폼/검증 | P1 |
-| EXT-029 | **TemplateStyles** | 템플릿 scoped CSS | CSS 파서·허용 속성·스타일 스코핑 | 외부 URL/위험 CSS 제한·범위 격리 | P1 |
+| EXT-029 | **TemplateStyles** | 템플릿 scoped CSS | CSS 파서·허용 속성·스타일 스코핑 | 스코프 격리, CSS 경로별 허용 URL과 차단 URL 및 비공개 이미지 접근 | P1 |
 | EXT-030 | **TextExtracts** | 문서 텍스트 요약·추출 API | 렌더 AST→plain text→요약길이 정책 | 테이블/각주/템플릿 제거 정책 및 접근권한 | P1 |
 | EXT-031 | **Thanks** | 기여 감사 버튼·알림 | 기여 revision→감사 event 발행 | 중복 감사 방지·알림 수신 | P1 |
 | EXT-032 | **TitleBlacklist** | 금지 문서/계정 이름 패턴 | TitlePolicy 엔진·관리자 테스트 UI | 금지 제목 생성·이동·사용자 등록 거부 | P1 |
-| EXT-033 | **VisualEditor** | WYSIWYG 시각편집 | ProseMirror 계열 editor + AST serialization adapter | 링크·표·인용·템플릿 왕복 테스트, 소스 변환 경고 | P1 |
-| EXT-034 | **WikiEditor** | 확장 도구모음 기반 위키텍스트 편집 | 코드 편집기 도구모음/위키 문법 삽입 | 툴바 명령, 키보드, 미리보기 | P0 |
+| EXT-033 | **VisualEditor** | WYSIWYG 시각편집 | ProseMirror 계열 editor + AST serialization adapter | 링크·표·인용·틀 왕복, 소스 변환 경고, 기준 구성의 파일 업로드·삽입과 권한 거부 | P1 |
+| EXT-034 | **WikiEditor** | 확장 도구모음 기반 위키텍스트 편집 | 코드 편집기 도구모음/위키 문법 삽입 | 툴바·키보드·미리보기, 기준 구성의 파일 업로드·삽입, 줄바꿈·표 삽입 | P0 |
 
 ## 3. 번들 스킨 5종 대응 범위
 
