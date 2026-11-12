@@ -26,11 +26,10 @@
 | 25–26 | MariaDB·PostgreSQL·SQLite | FR-DBMS-001, FR-DBMS-002 | MariaDB·PostgreSQL은 기준. SQLite 제품 지원은 [ADR-0201](../../docs/adr/0201-relational-database-portability.md)의 네 DBMS 결정과 충돌합니다. [#9](https://github.com/fregmented/LibertyWiki/issues/9)의 SQLite는 비교 서버 구성입니다. |
 | 28–29 | 다중계정 비교, 감사, 북마크, 공개 로그 | FR-ADMIN-008, FR-POLICY-002, FR-DUALAPI-006, EXT-003 | 복수 계정·IP 비교와 조사·추가 조회 감사는 CheckUser 기준입니다. 지속 북마크와 가림 처리된 공개 로그는 이전에 필요하다는 운영 근거가 확인될 때 검토합니다. [Special:Investigate](https://www.mediawiki.org/wiki/Help:Special_Investigate) |
 | 31–33 | 외부 영상의 HTML5 삽입·모바일 재생 | FR-FILE-006, FR-PARSE-002, FR-A11Y-002, FR-EXT-002, FR-ADDON-002 | 후속 선택 확장. 기존 동영상 썸네일과 브라우저 재생을 구분합니다. 승인된 제공자·형식, 모바일 재생과 실패 상태를 검증합니다. |
-| 35–36 | 번들 ParserFunctions 전수 | FR-PARSE-004, FR-COMP-003, FR-PARSERDATA-001, EXT-020 | 보완. 1.46.2에서 구성별 활성 함수의 정상·오류·중첩을 검증합니다. 문자열 함수는 설정별로 확인합니다. [ParserFunctions](https://www.mediawiki.org/wiki/Extension:ParserFunctions) |
 | 38–40 | 완전한 시각 편집 | FR-EDIT-011, FR-PARSE-007, FR-COMP-004, EXT-033 | 기준. 대표 왕복 PoC와 GA의 번들 기능 전수를 구분합니다. 원본·시각 모드에서 표, 인용, 틀, 미수정 원문을 검증합니다. |
 | 42–47 | 문서 내 CSS, 공통 CSS | FR-SITE-004, FR-API-005, FR-PARSE-002, FR-EXT-002, EXT-029 | 기준과 충돌. 권한 있는 사이트 스타일과 범위가 제한된 TemplateStyles는 기준입니다. 임의 CSS 주입은 격리 규칙과 충돌하며, 별도 문법은 실사용이 확인될 때 안전한 변환 또는 확장으로 검토합니다. 178–179행과 함께 봅니다. |
 | 49–53 | 사용자 토론에서 본문으로 복귀 | FR-NS-001, FR-TALK-001 | 원문에서 해결로 표시했습니다. 사용자 문서↔사용자 토론의 양방향 이동은 일반 토론 회귀 기준에 포함합니다. |
-| 55–59 | 리브레맵스, 유니폼 틀, 대진표·가계도 | FR-PARSE-003, FR-PARSE-004, FR-PARSE-008, FR-API-008, FR-EXT-003, FR-ADDON-001 | 지도 삽입은 후속 선택 확장입니다. 유니폼·대진표·가계도 틀과 모듈은 콘텐츠로 이관합니다. 표준 문법으로 처리되지 않는 include가 실제로 쓰이면 이전에서 검증합니다. |
+| 55–59 | 리브레맵스, 유니폼 틀, 대진표·가계도 | FR-PARSE-003, FR-PARSE-008, FR-API-008, FR-EXT-003, FR-ADDON-001 | 지도 삽입은 후속 선택 확장입니다. 유니폼·대진표·가계도 틀과 모듈은 콘텐츠로 이관합니다. 표준 문법으로 처리되지 않는 include가 실제로 쓰이면 이전에서 검증합니다. |
 | 61–64 | 클릭 가능한 이미지와 HTML 링크 | FR-LINK-001, FR-PARSE-001, FR-COMP-003, EXT-011 | 보완. 표준 파일 `link=`의 내부·외부·빈 대상을 검증합니다. 임의 HTML과 별도 중첩 링크 문법은 보안·문법 경계를 적용합니다. [이미지 링크](https://www.mediawiki.org/wiki/Help:Images#Link_behavior) |
 | 66–70 | 외부 이미지 삽입과 후속 반대 | FR-PARSE-002, FR-COMP-003, FR-POLICY-001 | 충돌이 있는 제안. 호환 프로파일의 설정에 따른 외부 이미지와 허용 도메인을 시험합니다. 원문의 새 문법과 사이트에서 허용할 호스트는 별도 이전 조사 대상입니다. [외부 이미지 설정](https://www.mediawiki.org/wiki/Manual:$wgAllowExternalImagesFrom) |
 | 72–73 | 사용자 문서에서 기여·프로필 열기 | FR-AUTH-002, FR-AUTH-003, FR-AUTH-004, FR-ADMIN-001, FR-API-008, FR-ADDON-003 | 기여 탐색과 권한별 공개 기록은 기준입니다. 사용자프로필과 공개 필드 집계는 후속 선택 확장으로 개발하며 기존 사이트 URL은 필요할 때 이전에서 검증합니다. |
@@ -73,7 +72,7 @@
 | [ADR-0201](../../docs/adr/0201-relational-database-portability.md) | FR-DBMS-001/002. 인터뷰 Q10–11, Q14, Q19, Q21–22의 DB 선택·지원 하한과 동등성. |
 | [ADR-0202](../../docs/adr/0202-extension-and-release-boundaries.md), [PRD §9](01_PRODUCT_PLAN.md#9-제품-출시와-실제-이전의-분리) | FR-EXT-001–003, FR-STORE-001–004, FR-RELEASE-001, FR-API-008, FR-SITE-005, FR-PAGE-008, FR-AUTH-001/008, FR-ADMIN-007. 인터뷰 Q2–8, Q12–13, Q15–17, Q20, Q25–26의 독립 확장·저장소·1.0 프로파일과 별도 이전 승인. |
 | [ADR-0203](../../docs/adr/0203-runtime-and-infrastructure-independence.md) | FR-RUNTIME-001, FR-OPS-001/003/004. 앱 ARM64/x86-64와 독립 인프라 실행환경 및 사용자 선택 오케스트레이션. |
-| [ADR-0204](../../docs/adr/0204-parser-test-data-boundary.md), [호환 설계](10_COMPATIBILITY.md) | FR-PARSERDATA-001, FR-PARSE-001/004/007/008, FR-COMP-003/004. 승인된 fixture 데이터의 출처·설정과 독립 실행기, 손실 없는 왕복 검증. |
+| [ADR-0204](../../docs/adr/0204-parser-test-data-boundary.md), [호환 설계](10_COMPATIBILITY.md) | FR-PARSERDATA-001, FR-PARSE-001/007/008, FR-COMP-003/004. 승인된 fixture 데이터의 출처·설정과 독립 실행기, 손실 없는 왕복 검증. |
 
 ## GitHub 이슈와 제품 계약
 
@@ -141,7 +140,7 @@
 - **편집과 이력.** [#10](https://github.com/fregmented/LibertyWiki/issues/10)은 저장된 판끼리 비교하고, [#11](https://github.com/fregmented/LibertyWiki/issues/11)은 충돌 시 게시된 차이를 표시하며 자동 병합을 `compat_gap`으로 둡니다. [#18](https://github.com/fregmented/LibertyWiki/issues/18)의 렌더링 미리보기에는 저장 전 원문 차이가 빠져 있습니다. FR-EDIT-001/002/005의 각 비교 기준과 무부작용을 따로 검증합니다. FR-EDIT-006의 웹 확인, FR-AUTH-001의 만료 후 편집 복구는 [#16](https://github.com/fregmented/LibertyWiki/issues/16)·[#14](https://github.com/fregmented/LibertyWiki/issues/14)의 기본 동작에 추가로 검증합니다.
 - **문서·기여·최근 변경.** FR-PAGE-003의 토론·하위 문서 동반 이동, FR-LINK-002의 없는 대상·고아 문서 목록, FR-AUTH-004의 이름공간 필터·로그 범위, FR-WATCH-002의 편집·로그 통합 피드는 첫 이슈 범위를 넘어섭니다. 관련 기준에는 [#28](https://github.com/fregmented/LibertyWiki/issues/28), [#26](https://github.com/fregmented/LibertyWiki/issues/26), [#20](https://github.com/fregmented/LibertyWiki/issues/20), [#19](https://github.com/fregmented/LibertyWiki/issues/19)·[#47](https://github.com/fregmented/LibertyWiki/issues/47)·[#49](https://github.com/fregmented/LibertyWiki/issues/49)를 연결합니다. 기준 프로파일의 권한·필터·페이지네이션을 포함해 확인합니다.
 - **기준 기능과 단계.** FR-EDIT-003의 저장 전 검증과 FR-ADMIN-003/EXT-001의 행위 필터 기능에는 서로 다른 단계 표기가 있습니다. 기본 입력·권한 검증, 활성 필터의 호출과 효과를 각각 추적합니다. FR-API-002의 P1 Action 어댑터 항목과 별개로 [#30](https://github.com/fregmented/LibertyWiki/issues/30)·[#62](https://github.com/fregmented/LibertyWiki/issues/62)의 P0 통합 범위에는 핵심 Action·REST 검증이 포함됩니다. FR-PARSE-007/008과 EXT-033/024의 전체 기능 수용은 [#60](https://github.com/fregmented/LibertyWiki/issues/60)·[#61](https://github.com/fregmented/LibertyWiki/issues/61)의 대표 위험군 시험과 구분합니다.
-- **직접 구현 이슈가 필요한 기준.** 특수 페이지 목록, XML 내보내기, CheckUser, ParserFunctions 전수, 시각 편집, Gadgets의 기능 계약은 인접한 MVP 이슈 또는 시험 하니스로는 충족 범위를 확인할 수 없습니다. 각 FR·EXT의 동작·API·권한·설정별 수용 기준으로 검증합니다. PRD의 베타 가젯 범위와 FR-API-006/EXT-010의 GA 기준은 개별 기능 명세에서 확인할 항목입니다.
+- **직접 구현 이슈가 필요한 기준.** 특수 페이지 목록, XML 내보내기, CheckUser, 시각 편집, Gadgets의 기능 계약은 인접한 MVP 이슈 또는 시험 하니스로는 충족 범위를 확인할 수 없습니다. 각 FR·EXT의 동작·API·권한·설정별 수용 기준으로 검증합니다. PRD의 베타 가젯 범위와 FR-API-006/EXT-010의 GA 기준은 개별 기능 명세에서 확인할 항목입니다.
 
 ## 이전 조건의 수용 기준
 

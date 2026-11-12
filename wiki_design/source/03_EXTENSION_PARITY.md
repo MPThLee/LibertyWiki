@@ -31,7 +31,7 @@
 | EXT-017 | **Nuke** | 사용자 일괄 생성 문서 삭제 | 범위 미리보기→승인→비동기 소프트 삭제 | 최대 건수 제한·부분실패/실행 로그 | P1 |
 | EXT-018 | **OATHAuth** | OTP/TOTP 2단계 인증 | TOTP 검증·복구 코드·관리 정책 | OTP 회전/재사용 방지·백업코드 폐기 | P1 |
 | EXT-019 | **PageImages** | 문서 대표 이미지 추출 | 문서 렌더 AST에서 대표 이미지 선정 | 이미지 변경 시 문서 썸네일 갱신 | P1 |
-| EXT-020 | **ParserFunctions** | 조건문·식·문자/시간 함수 | Wikitext ParserFunctionRegistry | 활성 함수 전수와 문자열 함수의 구성 차이, 함수별 정상·오류·중첩·자원 제한 | P1 |
+| EXT-020 | **ParserFunctions** | 조건문·식·문자/시간 함수 | Wikitext ParserFunctionRegistry | 함수별 Golden tests/에러·리소스 제한 | P1 |
 | EXT-021 | **PdfHandler** | PDF 파일 미리보기/페이지 썸네일 | 별도 PDF 렌더 worker 제한된 샌드박스 | 큰 PDF/암호화/손상 파일 fallback | P1 |
 | EXT-022 | **Poem** | 시와 줄바꿈 태그 렌더링 | `<poem>` parser plugin | 빈 줄·공백·마크업 속성 보존 | P1 |
 | EXT-023 | **Replace Text** | 대량 본문 정규식 치환 | dry-run diff + batch mutation + undo 지점 | 선택/전후 diff/실패 재개/권한 검사 | P1 |

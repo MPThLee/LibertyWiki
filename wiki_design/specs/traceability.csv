@@ -31,7 +31,7 @@ FR-EDIT-011,Core,시각편집기,Revision,P1,정의된 round-trip fixtures에서
 FR-PARSE-001,Core,Wikitext 기본 파서,Parser,P0,승인된 parser golden tests를 통과합니다.,TC-PARSE-001,PLANNED,PRODUCT_1_0
 FR-PARSE-002,Core,미리보기/렌더링,Parser,P0,동일 입력에서 일관된 의미와 서버 XSS 차단.,TC-PARSE-002,PLANNED,PRODUCT_1_0
 FR-PARSE-003,Core,템플릿 포함,Parser,P0,...}}` 구문과 중첩 transclusion을 제한된 평가 컨텍스트에서 처리합니다.,TC-PARSE-003,PLANNED,PRODUCT_1_0
-FR-PARSE-004,Core,파서 함수,Parser,P1,프로파일별 활성 함수 목록 및 선택적 문자열 함수 설정을 고정하고 각 함수의 정상·오류·중첩·제한 fixtures를 검증합니다.,TC-PARSE-004,PLANNED,PRODUCT_1_0
+FR-PARSE-004,Core,파서 함수,Parser,P1,각 함수 정상·오류·중첩 fixtures 통과.,TC-PARSE-004,PLANNED,PRODUCT_1_0
 FR-PARSE-005,Core,매직 워드,Parser,P1,환경 정보·시간대별 예상 값이 정확합니다.,TC-PARSE-005,PLANNED,PRODUCT_1_0
 FR-PARSE-006,Core,Parser AST/의존 그래프,Parser,P0,템플릿 수정 시 참조 페이지 무효화 작업이 생성됩니다.,TC-PARSE-006,PLANNED,PRODUCT_1_0
 FR-PARSE-007,Core,왕복 변환/부분 직렬화,Parser,P1,선택적 직렬화 테스트에서 미수정 토큰의 손실이 없습니다.,TC-PARSE-007,PLANNED,PRODUCT_1_0
@@ -116,7 +116,7 @@ EXT-016,Bundled extension 1.46,MultimediaViewer,MultimediaViewer,P1,모바일/�
 EXT-017,Bundled extension 1.46,Nuke,Nuke,P1,최대 건수 제한·부분실패/실행 로그,TC-EXT-017,PLANNED,PRODUCT_1_0
 EXT-018,Bundled extension 1.46,OATHAuth,OATHAuth,P1,OTP 회전/재사용 방지·백업코드 폐기,TC-EXT-018,PLANNED,PRODUCT_1_0
 EXT-019,Bundled extension 1.46,PageImages,PageImages,P1,이미지 변경 시 문서 썸네일 갱신,TC-EXT-019,PLANNED,PRODUCT_1_0
-EXT-020,Bundled extension 1.46,ParserFunctions,ParserFunctions,P1,"활성 함수 전수와 문자열 함수의 구성 차이, 함수별 정상·오류·중첩·자원 제한",TC-EXT-020,PLANNED,PRODUCT_1_0
+EXT-020,Bundled extension 1.46,ParserFunctions,ParserFunctions,P1,함수별 Golden tests/에러·리소스 제한,TC-EXT-020,PLANNED,PRODUCT_1_0
 EXT-021,Bundled extension 1.46,PdfHandler,PdfHandler,P1,큰 PDF/암호화/손상 파일 fallback,TC-EXT-021,PLANNED,PRODUCT_1_0
 EXT-022,Bundled extension 1.46,Poem,Poem,P1,빈 줄·공백·마크업 속성 보존,TC-EXT-022,PLANNED,PRODUCT_1_0
 EXT-023,Bundled extension 1.46,Replace Text,Replace Text,P1,선택/전후 diff/실패 재개/권한 검사,TC-EXT-023,PLANNED,PRODUCT_1_0
