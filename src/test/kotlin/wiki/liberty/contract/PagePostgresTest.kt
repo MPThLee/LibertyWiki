@@ -36,6 +36,134 @@ class PagePostgresTest {
     private val source = "== Source ==\r\n<script>literal</script>\n"
 
     @Test
+    fun `native commit appends a revision and rejects a stale base`() {
+        val created = http.nativeCreate("Edit ${UUID.randomUUID()}", source).json
+        val pageId = created["id"].asText()
+        val base = created["currentRevisionId"].asText()
+        val path = "$native/$pageId/revisions"
+        val before = rowCounts()
+        val body = mapOf("baseRevisionId" to base, "source" to "Updated 원문")
+        val operation = "/paths/~1pages~1{pageId}~1revisions/post"
+        validateSchema(spec.at("$operation/requestBody/content/application~1json/schema"), yaml.valueToTree(body))
+        val absent = http.postJson("$native/${UUID.randomUUID()}/revisions", body, operatorToken)
+        assertThat(absent.status).isEqualTo(404)
+        assertSchema("$operation/responses/404", absent.json)
+        val missingBase = http.postJson(path, mapOf("source" to "Updated 원문"), operatorToken)
+        assertThat(missingBase.status).isEqualTo(400)
+        assertSchema("$operation/responses/400", missingBase.json)
+        val invalidBase = http.postJson(path, body + ("baseRevisionId" to "1-1-1-1-1"), operatorToken)
+        assertThat(invalidBase.status).isEqualTo(422)
+        assertThat(invalidBase.json["code"].asText()).isEqualTo("INVALID_BASE_REVISION_ID")
+        assertThat(rowCounts()).isEqualTo(before)
+        val edited = http.postJson(path, body, operatorToken)
+        assertThat(edited.status).isEqualTo(201)
+        assertSchema("/paths/~1pages~1{pageId}~1revisions/post/responses/201", edited.json)
+        assertThat(edited.json["currentRevisionId"].asText()).isNotEqualTo(base)
+        assertThat(edited.json["source"].asText()).isEqualTo("Updated 원문")
+        val stale = http.postJson(path, mapOf("baseRevisionId" to base, "source" to "Stale draft"), operatorToken)
+        assertThat(stale.status).isEqualTo(409)
+        assertSchema("/paths/~1pages~1{pageId}~1revisions/post/responses/409", stale.json)
+        assertThat(stale.json["code"].asText()).isEqualTo("EDIT_CONFLICT")
+        assertThat(http.get("$native/$pageId", operatorToken).json).isEqualTo(edited.json)
+        assertThat(rowCounts()).containsExactly(before[0], before[1] + 1, before[2] + 1, before[3] + 1)
+        assertThat(jdbc.queryForObject(
+            "SELECT source FROM wiki_revision WHERE id = ?", String::class.java, UUID.fromString(base),
+        )).isEqualTo(source)
+    }
+
+    @Test
+    fun `edit surfaces share the revision chain and events`() {
+        val title = "Chain-${UUID.randomUUID()}"
+        var current = http.nativeCreate(title, source).json
+        val pageId = current["id"].asText()
+        val before = rowCounts()
+        repeat(3) { surface ->
+            val compat = http.restRead(title, operatorToken).json
+            val compatBase = compat.at("/latest/id").asLong()
+            val base = current["currentRevisionId"].asText()
+            val updatedSource = "Updated source $surface"
+            val response = when (surface) {
+                0 -> http.postJson("$native/$pageId/revisions",
+                    mapOf("baseRevisionId" to base, "source" to updatedSource, "summary" to "Edit summary"), operatorToken)
+                1 -> http.restEdit(title, updatedSource, compatBase, auth = operatorToken)
+                else -> http.actionEdit("pageid" to compat["id"].asText(), updatedSource, compatBase, auth = operatorToken)
+            }
+            assertThat(response.status).isEqualTo(if (surface == 0) 201 else 200)
+            if (surface == 2) assertThat(response.json.at("/edit/oldrevid").asLong()).isEqualTo(compatBase)
+            val previous = current
+            current = http.get("$native/$pageId", operatorToken).json
+            assertThat(current["source"].asText()).isEqualTo(updatedSource)
+            assertThat(current["currentRevisionId"]).isNotEqualTo(previous["currentRevisionId"])
+            val action = http.actionRead("titles" to title, operatorToken).json.at("/query/pages/0/revisions/0")
+            assertThat(action["parentid"].asLong()).isEqualTo(compatBase)
+            assertThat(action.at("/slots/main/content").asText()).isEqualTo(updatedSource)
+            val state = jdbc.queryForMap(
+                """
+                SELECT r.parent_revision_id, r.source, r.summary, r.actor, a.event_type,
+                       a.actor AS audit_actor, o.actor AS outbox_actor, a.request_id
+                FROM wiki_revision r
+                JOIN wiki_audit a ON a.page_id = r.page_id AND a.revision_id = r.id
+                JOIN wiki_outbox o ON o.page_id = r.page_id AND o.revision_id = r.id
+                    AND o.request_id = a.request_id AND o.event_type = a.event_type
+                WHERE r.id = ?
+                """.trimIndent(),
+                UUID.fromString(current["currentRevisionId"].asText()),
+            )
+            assertThat(state["parent_revision_id"].toString()).isEqualTo(base)
+            assertThat(state["source"]).isEqualTo(updatedSource)
+            assertThat(state["summary"]).isEqualTo("Edit summary")
+            assertThat(state["event_type"]).isEqualTo("revision.committed")
+            assertThat(listOf(state["actor"], state["audit_actor"], state["outbox_actor"]))
+                .containsOnly("operator")
+            assertThat(state["request_id"].toString()).isEqualTo(response.header("X-Request-Id"))
+        }
+        assertThat(rowCounts()).containsExactly(before[0], before[1] + 3, before[2] + 3, before[3] + 3)
+    }
+
+    @Test
+    fun `concurrent edit surfaces commit once and invalid or unauthorized writes do not commit`() {
+        val title = "Edit-race-${UUID.randomUUID()}"
+        val created = http.nativeCreate(title, source).json
+        val pageId = created["id"].asText()
+        val base = created["currentRevisionId"].asText()
+        val compatBase = http.restRead(title, operatorToken).json.at("/latest/id").asLong()
+        val path = "$native/$pageId/revisions"
+        val before = rowCounts()
+        fun body(source: String) = mapOf("baseRevisionId" to base, "source" to source)
+        val denied = http.postJson(path, body("Anonymous"))
+        assertThat(denied.status).isEqualTo(403)
+        assertSchema("/paths/~1pages~1{pageId}~1revisions/post/responses/403", denied.json)
+        assertThat(http.restEdit(title, "Anonymous", compatBase).status).isEqualTo(403)
+        assertThat(http.actionEdit("title" to title, "Anonymous", compatBase).json.at("/error/code").asText())
+            .isEqualTo("permissiondenied")
+        val invalid = http.postJson(path, body("Bad\u0000source"), operatorToken)
+        assertThat(invalid.status).isEqualTo(422)
+        assertSchema("/paths/~1pages~1{pageId}~1revisions/post/responses/422", invalid.json)
+        assertThat(http.restEdit(title, "Bad\u0000source", compatBase, auth = operatorToken).status).isEqualTo(400)
+        assertThat(http.actionEdit("title" to title, "Bad\u0000source", compatBase, auth = operatorToken)
+            .json.at("/error/code").asText()).isEqualTo("invalidparam")
+        assertThat(rowCounts()).isEqualTo(before)
+
+        val barrier = CyclicBarrier(3)
+        val calls = listOf(
+            { http.postJson(path, body("Native winner"), operatorToken) },
+            { http.restEdit(title, "REST winner", compatBase, auth = operatorToken) },
+            { http.actionEdit("title" to title, "Action winner", compatBase, auth = operatorToken) },
+        )
+        val results = Executors.newFixedThreadPool(calls.size).use { executor ->
+            executor.invokeAll(calls.map { call -> Callable { barrier.await(); call() } }).map { it.get() }
+        }
+        val wins = listOf(results[0].status == 201, results[1].status == 200, results[2].json.has("edit"))
+        assertThat(wins.count { it }).isEqualTo(1)
+        if (!wins[0]) assertThat(results[0].status).isEqualTo(409)
+        if (!wins[1]) assertThat(results[1].status).isEqualTo(409)
+        if (!wins[2]) assertThat(results[2].json.at("/error/code").asText()).isEqualTo("editconflict")
+        val current = http.get("$native/$pageId", operatorToken).json
+        assertThat(current["source"].asText()).isEqualTo(listOf("Native winner", "REST winner", "Action winner")[wins.indexOf(true)])
+        assertThat(rowCounts()).containsExactly(before[0], before[1] + 1, before[2] + 1, before[3] + 1)
+    }
+
+    @Test
     fun `every creation surface persists the same first revision and events`() {
         val nativeTitle = "Élan ${UUID.randomUUID()}"
         val restTitle = "Rest ${UUID.randomUUID()}"
@@ -148,12 +276,19 @@ class PagePostgresTest {
 
     @Test
     fun `a failure after the audit insert rolls back every write`() {
-        val before = rowCounts()
         val title = "Rollback ${UUID.randomUUID()}"
+        val existing = http.nativeCreate("Edit $title", source).json
+        val path = "$native/${existing["id"].asText()}"
+        val before = rowCounts()
         jdbc.execute("ALTER TABLE wiki_outbox ADD CONSTRAINT contract_reject_outbox CHECK (false) NOT VALID")
         try {
             assertThat(http.nativeCreate(title, source).status).isEqualTo(500)
             assertThat(http.get("$native/by-title/${title.replace(' ', '_')}", operatorToken).status).isEqualTo(404)
+            val edit = http.postJson("$path/revisions",
+                mapOf("baseRevisionId" to existing["currentRevisionId"].asText(), "source" to "Never committed"),
+                operatorToken)
+            assertThat(edit.status).isEqualTo(500)
+            assertThat(http.get(path, operatorToken).json).isEqualTo(existing)
             assertThat(rowCounts()).isEqualTo(before)
         } finally {
             jdbc.execute("ALTER TABLE wiki_outbox DROP CONSTRAINT contract_reject_outbox")
@@ -195,9 +330,14 @@ class PagePostgresTest {
     private fun assertSchema(pointer: String, body: JsonNode) {
         val response = spec.at(pointer)
         val resolved = if (response.has("\$ref")) spec.at(response["\$ref"].asText().removePrefix("#")) else response
+        validateSchema(resolved.at("/content/application~1json/schema"), body)
+    }
+
+    private fun validateSchema(contract: JsonNode, body: JsonNode) {
+        assertThat(contract.isObject).isTrue()
         val schema = yaml.createObjectNode()
         schema.set<JsonNode>("components", spec["components"])
-        schema.set<JsonNode>("allOf", yaml.createArrayNode().add(resolved.at("/content/application~1json/schema")))
+        schema.set<JsonNode>("allOf", yaml.createArrayNode().add(contract))
         assertThat(schemaFactory.getSchema(schema).validate(body)).isEmpty()
     }
 

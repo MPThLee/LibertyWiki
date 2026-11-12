@@ -16,10 +16,20 @@ GET /w/api.php?action=query&prop=revisions&titles=Main_Page&format=json
 GET /w/rest.php/v1/page/Main_Page
 GET /api/v1/pages/by-title/Main_Page
 
-POST /w/api.php?action=edit&title=Sandbox&text=...&token=...
+POST /w/api.php
+Content-Type: application/x-www-form-urlencoded
+
+action=edit&title=Sandbox&text=Updated+source&baserevid=123&token=%2B%5C&format=json&formatversion=2
+
+PUT /w/rest.php/v1/page/Sandbox
+Content-Type: application/json
+
+{"latest":{"id":123},"source":"Updated source","comment":"","token":"+\\"}
+
 POST /api/v1/pages/{pageId}/revisions
 Content-Type: application/json
-If-Match: "revid:123"
+
+{"baseRevisionId":"b1c90cc5-0cf7-4815-805c-7f3f7f67f104","source":"Updated source"}
 
 POST /w/api.php?action=upload&filename=Example.png&token=...
 POST /api/v1/files/uploads
@@ -32,28 +42,33 @@ POST /api/v1/files/uploads
 하나의 기능은 여러 기존 API module 또는 여러 Native 리소스 연산으로 나타날 수 있습니다. 따라서 단순 URL 1:1 강제가 아니라 `capability_id`를 중심으로 **다대다 매핑**하고 각 route의 입력·출력 계약을 별도로 테스트합니다.
 
 ```yaml
-capabilityId: wiki.page.revision.commit
+capabilityId: CAP-REVISION-COMMIT
 sourceBaseline: MediaWiki-1.46.2
 compatible:
   action:
     - method: POST
       path: /w/api.php
       action: edit
-  rest: [] # 실제 기준버전 인벤토리에 해당 route가 있으면 등록
+  rest:
+    - method: PUT
+      path: /w/rest.php/v1/page/{title}
 native:
   - operationId: commitRevision
     method: POST
     path: /api/v1/pages/{pageId}/revisions
-sharedService: RevisionService.commit
+sharedService: PageApplicationService
 security:
-  policy: canEditPage
+  policy: read+edit
   auditEvent: revision.committed
 tests:
   - contract-action-edit
+  - contract-rest-update-page
   - contract-native-commitRevision
   - parity-revision-post-state
-status: DESIGN
+status: INCOMPLETE
 ```
+
+원문 편집의 현재 구현 범위, 기준 revision 및 호환성 차이는 [내부 시험용 원문 편집 계약](15_PAGE_SOURCE_SLICE.md#기존-문서-편집)에 명시합니다.
 
 각 operation의 metadata: `capabilityId`, `upstreamVersionIntroduced`, `upstreamVersionChanged`, `mwCompatAction`, `mwCompatRest`, `nativeOperationIds`, `permissionPolicyId`, `sideEffectIds`, `testIds`, `extensionId`, `status`, `owner`, `fixtureVersion`, `releaseId`.
 

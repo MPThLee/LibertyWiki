@@ -12,8 +12,10 @@ import wiki.liberty.adapter.api.InvalidCredentials
 import wiki.liberty.adapter.api.PageHttp
 import wiki.liberty.adapter.api.requestId
 import wiki.liberty.application.CreatePage
+import wiki.liberty.application.EditPage
 import wiki.liberty.application.PageActor
 import wiki.liberty.application.PageApplicationService
+import wiki.liberty.application.RevisionBase
 import wiki.liberty.domain.Page
 import wiki.liberty.domain.PageError
 import wiki.liberty.domain.PageFailure
@@ -23,6 +25,7 @@ import java.time.Instant
 import java.util.UUID
 
 data class NativeCreatePage(val title: String, val namespaceId: Int, val source: String, val summary: String = "")
+data class NativeEditPage(val baseRevisionId: String, val source: String, val summary: String = "")
 
 data class NativeSourcePage(
     val id: UUID,
@@ -37,20 +40,33 @@ data class NativeSourcePage(
 
 data class NativeError(val code: String, val message: String, val requestId: UUID)
 class NativePageMissing : RuntimeException()
-class InvalidNativeId : RuntimeException()
+class InvalidNativeId(val revision: Boolean) : RuntimeException()
 
 @RestController
 @RequestMapping("/api/v1/pages", produces = [MediaType.APPLICATION_JSON_VALUE])
 class NativePages(private val pages: PageApplicationService, private val http: PageHttp) {
     @PostMapping
     fun create(@RequestBody body: NativeCreatePage, request: HttpServletRequest): ResponseEntity<NativeSourcePage> {
-        if (request.contentType?.substringBefore(';')?.equals(MediaType.APPLICATION_JSON_VALUE, ignoreCase = true) != true) {
-            throw HttpMediaTypeNotSupportedException("Expected application/json.")
-        }
+        requireJson(request)
         val page = pages.create(
             http.actor(request), request.requestId(), CreatePage(body.title, body.namespaceId, body.source, body.summary),
         )
         return ResponseEntity.created(URI.create("/api/v1/pages/${page.id}")).body(page.native())
+    }
+
+    @PostMapping("/{pageId}/revisions")
+    @ResponseStatus(HttpStatus.CREATED)
+    fun edit(
+        @PathVariable pageId: String, @RequestBody body: NativeEditPage, request: HttpServletRequest,
+    ): NativeSourcePage {
+        requireJson(request)
+        val actor = http.actor(request)
+        pages.requireRead(actor)
+        val command = EditPage(
+            PageLookup.Id(parseId(pageId)), RevisionBase.Native(parseId(body.baseRevisionId, revision = true)),
+            body.source, body.summary,
+        )
+        return pages.edit(actor, request.requestId(), command).native()
     }
 
     @GetMapping("/by-title/{title}")
@@ -65,12 +81,22 @@ class NativePages(private val pages: PageApplicationService, private val http: P
     fun byId(@PathVariable pageId: String, request: HttpServletRequest): NativeSourcePage {
         val actor = http.actor(request)
         pages.requireRead(actor)
-        val id = try {
-            UUID.fromString(pageId).also { if (!it.toString().equals(pageId, ignoreCase = true)) throw InvalidNativeId() }
+        return read(PageLookup.Id(parseId(pageId)), actor)
+    }
+
+    private fun parseId(value: String, revision: Boolean = false): UUID =
+        try {
+            UUID.fromString(value).also {
+                if (!it.toString().equals(value, ignoreCase = true)) throw InvalidNativeId(revision)
+            }
         } catch (_: IllegalArgumentException) {
-            throw InvalidNativeId()
+            throw InvalidNativeId(revision)
         }
-        return read(PageLookup.Id(id), actor)
+
+    private fun requireJson(request: HttpServletRequest) {
+        if (request.contentType?.substringBefore(';')?.equals(MediaType.APPLICATION_JSON_VALUE, ignoreCase = true) != true) {
+            throw HttpMediaTypeNotSupportedException("Expected application/json.")
+        }
     }
 
     private fun read(lookup: PageLookup, actor: PageActor): NativeSourcePage =
@@ -85,12 +111,15 @@ class NativePageErrors {
     fun domain(failure: PageFailure, request: HttpServletRequest): ResponseEntity<NativeError> {
         val status = when (failure.error) {
             PageError.FORBIDDEN -> HttpStatus.FORBIDDEN
-            PageError.EXISTS -> HttpStatus.CONFLICT
+            PageError.EXISTS, PageError.EDIT_CONFLICT -> HttpStatus.CONFLICT
+            PageError.PAGE_NOT_FOUND -> HttpStatus.NOT_FOUND
             else -> HttpStatus.UNPROCESSABLE_ENTITY
         }
         val message = when (failure.error) {
             PageError.FORBIDDEN -> "The page operation is forbidden."
             PageError.EXISTS -> "A page with this title already exists."
+            PageError.EDIT_CONFLICT -> "The page has changed since the base revision."
+            PageError.PAGE_NOT_FOUND -> "Page not found."
             PageError.INVALID_TITLE -> "The title is invalid or outside the supported namespace."
             PageError.INVALID_NAMESPACE -> "Only the main namespace is supported."
             PageError.INVALID_SOURCE -> "Source must be valid Unicode and at most 1 MiB in UTF-8."
@@ -103,8 +132,11 @@ class NativePageErrors {
     fun missing(request: HttpServletRequest) = error(HttpStatus.NOT_FOUND, "PAGE_NOT_FOUND", "Page not found.", request)
 
     @ExceptionHandler(InvalidNativeId::class)
-    fun invalidId(request: HttpServletRequest) =
+    fun invalidId(failure: InvalidNativeId, request: HttpServletRequest) = if (failure.revision) {
+        error(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_BASE_REVISION_ID", "Expected a base revision UUID.", request)
+    } else {
         error(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_PAGE_ID", "Expected a page UUID.", request)
+    }
 
     @ExceptionHandler(HttpMessageNotReadableException::class)
     fun invalidBody(request: HttpServletRequest) =

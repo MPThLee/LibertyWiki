@@ -26,12 +26,22 @@ data class PagePolicy(
 )
 
 data class CreatePage(val title: String, val namespaceId: Int, val source: String, val summary: String)
+data class EditPage(val lookup: PageLookup, val base: RevisionBase, val source: String, val summary: String)
+sealed interface RevisionBase {
+    data class Native(val id: UUID) : RevisionBase
+    data class Compat(val id: Long) : RevisionBase
+}
+
 data class PageRead(val page: Page?, val normalizedTitle: PageTitle? = null)
 
 @Service
 class PageApplicationService(private val repository: PageRepository, private val policy: PagePolicy) {
     fun read(actor: PageActor, lookup: PageLookup): PageRead {
         requireRead(actor)
+        return find(lookup)
+    }
+
+    private fun find(lookup: PageLookup): PageRead {
         return when (lookup) {
             is PageLookup.Title -> {
                 val title = parseTitle(lookup.input)
@@ -50,20 +60,40 @@ class PageApplicationService(private val repository: PageRepository, private val
         }
         if (command.namespaceId != 0) throw PageFailure(PageError.INVALID_NAMESPACE)
         val title = parseTitle(command.title)
-        val source = command.source.toByteArray()
-        if (source.size > 1_048_576 || !validUnicode(command.source)) throw PageFailure(PageError.INVALID_SOURCE)
-        if (command.summary.codePointCount(0, command.summary.length) > 500 || !validUnicode(command.summary)) {
-            throw PageFailure(PageError.INVALID_SUMMARY)
-        }
-        val sha256 = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(source))
         val result = repository.create(
-            FirstRevision(title, command.source, sha256, command.summary, Instant.now().truncatedTo(ChronoUnit.SECONDS),
-                actor, requestId),
+            FirstRevision(title, revision(actor, requestId, command.source, command.summary)),
         )
         return when (result) {
             is PageInsert.Created -> result.page
             PageInsert.DuplicateTitle -> throw PageFailure(PageError.EXISTS)
         }
+    }
+
+    @Transactional(timeout = 8)
+    fun edit(actor: PageActor, requestId: UUID, command: EditPage): Page {
+        requireRead(actor)
+        if (actor == PageActor.ANONYMOUS && !policy.anonymousEdit) throw PageFailure(PageError.FORBIDDEN)
+        val revision = revision(actor, requestId, command.source, command.summary)
+        val current = find(command.lookup).page ?: throw PageFailure(PageError.PAGE_NOT_FOUND)
+        val currentBase = when (val base = command.base) {
+            is RevisionBase.Native -> base.id == current.revisionId
+            is RevisionBase.Compat -> base.id == current.compatRevisionId
+        }
+        if (!currentBase) throw PageFailure(PageError.EDIT_CONFLICT)
+        return when (val result = repository.append(current, revision)) {
+            is RevisionAppend.Committed -> result.page
+            RevisionAppend.StaleBase -> throw PageFailure(PageError.EDIT_CONFLICT)
+        }
+    }
+
+    private fun revision(actor: PageActor, requestId: UUID, source: String, summary: String): RevisionWrite {
+        val bytes = source.toByteArray()
+        if (bytes.size > 1_048_576 || !validUnicode(source)) throw PageFailure(PageError.INVALID_SOURCE)
+        if (summary.codePointCount(0, summary.length) > 500 || !validUnicode(summary)) {
+            throw PageFailure(PageError.INVALID_SUMMARY)
+        }
+        val sha256 = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes))
+        return RevisionWrite(source, sha256, summary, Instant.now().truncatedTo(ChronoUnit.SECONDS), actor, requestId)
     }
 
     fun requireRead(actor: PageActor) {

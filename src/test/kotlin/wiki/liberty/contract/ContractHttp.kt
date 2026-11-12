@@ -44,7 +44,15 @@ internal class ContractHttp(private val base: String, private val scriptPath: St
     }
 
     fun restRead(title: String, auth: String? = null) =
-        get("$scriptPath/rest.php/v1/page/${encoded(title).replace("+", "%20")}", auth)
+        get(restPage(title), auth)
+
+    fun restEdit(title: String, source: String, base: Long, token: String? = csrfToken, auth: String? = null): Result {
+        val body = mutableMapOf<String, Any>("source" to source, "latest" to mapOf("id" to base), "comment" to "Edit summary")
+        if (token != null) body["token"] = token
+        return send(restPage(title), mapper.writeValueAsString(body), "application/json", auth, "PUT")
+    }
+
+    private fun restPage(title: String) = "$scriptPath/rest.php/v1/page/${encoded(title).replace("+", "%20")}"
 
     fun actionQuery(vararg params: Pair<String, String>, auth: String? = null) =
         get("$scriptPath/api.php?" + form(mapOf("action" to "query") + params), auth)
@@ -59,16 +67,24 @@ internal class ContractHttp(private val base: String, private val scriptPath: St
         "prop" to "revisions", key, "rvslots" to "main", "rvprop" to revisionFields, auth = auth,
     )
 
+    fun actionEdit(key: Pair<String, String>, source: String, base: Long, token: String = csrfToken, auth: String? = null): Result {
+        val body = form(mapOf("action" to "edit", key, "text" to source, "baserevid" to base.toString(),
+            "nocreate" to "1", "summary" to "Edit summary", "token" to token))
+        return send("$scriptPath/api.php", body, "application/x-www-form-urlencoded", auth)
+    }
+
     fun postJson(path: String, body: Any, auth: String? = null) =
         send(path, mapper.writeValueAsString(body), "application/json", auth)
 
     fun postText(path: String, body: String, auth: String? = null) =
         send(path, body, "text/plain", auth)
 
-    private fun send(path: String, body: String? = null, type: String? = null, auth: String? = null): Result {
+    private fun send(
+        path: String, body: String? = null, type: String? = null, auth: String? = null, method: String = "POST",
+    ): Result {
         val request = HttpRequest.newBuilder(URI.create(base + path)).timeout(Duration.ofSeconds(15))
         if (auth != null) request.header("Authorization", "Bearer $auth")
-        if (body != null) request.header("Content-Type", checkNotNull(type)).POST(HttpRequest.BodyPublishers.ofString(body))
+        if (body != null) request.header("Content-Type", checkNotNull(type)).method(method, HttpRequest.BodyPublishers.ofString(body))
         return Result(client.send(request.build(), HttpResponse.BodyHandlers.ofString()))
     }
 

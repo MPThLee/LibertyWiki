@@ -12,6 +12,7 @@ interface PageRepository {
     fun findById(id: PageLookup.Id): Page?
     fun findByCompatId(id: PageLookup.CompatId): Page?
     fun create(page: FirstRevision): PageInsert
+    fun append(base: Page, revision: RevisionWrite): RevisionAppend
 }
 
 sealed interface PageInsert {
@@ -19,8 +20,17 @@ sealed interface PageInsert {
     data object DuplicateTitle : PageInsert
 }
 
+sealed interface RevisionAppend {
+    data class Committed(val page: Page) : RevisionAppend
+    data object StaleBase : RevisionAppend
+}
+
 data class FirstRevision(
     val title: PageTitle,
+    val revision: RevisionWrite,
+)
+
+data class RevisionWrite(
     val source: String,
     val sha256: String,
     val summary: String,

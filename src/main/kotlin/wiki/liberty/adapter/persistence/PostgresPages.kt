@@ -6,6 +6,8 @@ import org.springframework.stereotype.Repository
 import wiki.liberty.application.FirstRevision
 import wiki.liberty.application.PageInsert
 import wiki.liberty.application.PageRepository
+import wiki.liberty.application.RevisionAppend
+import wiki.liberty.application.RevisionWrite
 import wiki.liberty.domain.Page
 import wiki.liberty.domain.PageLookup
 import wiki.liberty.domain.PageTitle
@@ -21,9 +23,10 @@ class PostgresPages(private val jdbc: JdbcTemplate) : PageRepository {
     private fun find(condition: String, key: Any): Page? = jdbc.query(
         """
         SELECT p.id, p.compat_id, p.normalized_title, r.id AS revision_id,
-               r.compat_id AS compat_revision_id, r.source, r.created_at
+               r.compat_id AS compat_revision_id, r.source, r.created_at, parent.compat_id AS compat_parent_id
         FROM wiki_page p
         JOIN wiki_revision r ON r.page_id = p.id AND r.id = p.current_revision_id
+        LEFT JOIN wiki_revision parent ON parent.page_id = p.id AND parent.id = r.parent_revision_id
         WHERE $condition
         """.trimIndent(),
         { row, _ ->
@@ -32,6 +35,7 @@ class PostgresPages(private val jdbc: JdbcTemplate) : PageRepository {
                 checkNotNull(PageTitle.parse(row.getString("normalized_title"))),
                 row.getObject("revision_id", UUID::class.java), row.getLong("compat_revision_id"),
                 row.getString("source"), row.getTimestamp("created_at").toInstant(),
+                row.getObject("compat_parent_id", Long::class.javaObjectType),
             )
         },
         key,
@@ -51,30 +55,56 @@ class PostgresPages(private val jdbc: JdbcTemplate) : PageRepository {
             pageId, page.title.value, revisionId,
         ).singleOrNull() ?: return PageInsert.DuplicateTitle
 
-        val createdAt = page.createdAt.atOffset(ZoneOffset.UTC)
-        val actor = page.actor.name.lowercase()
+        val revision = page.revision
+        val compatRevisionId = writeRevision(pageId, revisionId, null, revision, "page.created")
+        return PageInsert.Created(Page(pageId, compatId, page.title, revisionId, compatRevisionId, revision.source, revision.createdAt))
+    }
+
+    override fun append(base: Page, revision: RevisionWrite): RevisionAppend {
+        val revisionId = UUID.randomUUID()
+        // The deferred foreign key permits claiming the head before inserting the revision.
+        val updated = jdbc.update(
+            "UPDATE wiki_page SET current_revision_id = ? WHERE id = ? AND current_revision_id = ?",
+            revisionId, base.id, base.revisionId,
+        )
+        if (updated == 0) return RevisionAppend.StaleBase
+        val compatRevisionId = writeRevision(base.id, revisionId, base.revisionId, revision, "revision.committed")
+        return RevisionAppend.Committed(base.copy(
+            revisionId = revisionId,
+            compatRevisionId = compatRevisionId,
+            source = revision.source,
+            createdAt = revision.createdAt,
+            compatParentRevisionId = base.compatRevisionId,
+        ))
+    }
+
+    private fun writeRevision(
+        pageId: UUID, revisionId: UUID, parentId: UUID?, revision: RevisionWrite, eventType: String,
+    ): Long {
+        val createdAt = revision.createdAt.atOffset(ZoneOffset.UTC)
+        val actor = revision.actor.name.lowercase()
         val compatRevisionId = checkNotNull(jdbc.queryForObject(
             """
-            INSERT INTO wiki_revision (id, page_id, source, source_sha256, summary, actor, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING compat_id
+            INSERT INTO wiki_revision (id, page_id, parent_revision_id, source, source_sha256, summary, actor, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING compat_id
             """.trimIndent(),
             Long::class.javaObjectType,
-            revisionId, pageId, page.source, page.sha256, page.summary, actor, createdAt,
+            revisionId, pageId, parentId, revision.source, revision.sha256, revision.summary, actor, createdAt,
         ))
         jdbc.update(
             """
             INSERT INTO wiki_audit (event_type, page_id, revision_id, actor, request_id, occurred_at)
-            VALUES ('page.created', ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?)
             """.trimIndent(),
-            pageId, revisionId, actor, page.requestId, createdAt,
+            eventType, pageId, revisionId, actor, revision.requestId, createdAt,
         )
         jdbc.update(
             """
             INSERT INTO wiki_outbox (event_type, page_id, revision_id, actor, request_id, occurred_at)
-            VALUES ('page.created', ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?)
             """.trimIndent(),
-            pageId, revisionId, actor, page.requestId, createdAt,
+            eventType, pageId, revisionId, actor, revision.requestId, createdAt,
         )
-        return PageInsert.Created(Page(pageId, compatId, page.title, revisionId, compatRevisionId, page.source, page.createdAt))
+        return compatRevisionId
     }
 }

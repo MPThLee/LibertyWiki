@@ -8,8 +8,10 @@ import wiki.liberty.adapter.api.InvalidCredentials
 import wiki.liberty.adapter.api.PageHttp
 import wiki.liberty.adapter.api.requestId
 import wiki.liberty.application.CreatePage
+import wiki.liberty.application.EditPage
 import wiki.liberty.application.PageActor
 import wiki.liberty.application.PageApplicationService
+import wiki.liberty.application.RevisionBase
 import wiki.liberty.domain.Page
 import wiki.liberty.domain.PageError
 import wiki.liberty.domain.PageFailure
@@ -41,19 +43,32 @@ class MediaWikiAction(private val pages: PageApplicationService, private val htt
         if (request.contentType?.substringBefore(';') != MediaType.APPLICATION_FORM_URLENCODED_VALUE ||
             request.queryString != null
         ) unsupported("Send edit parameters in an application/x-www-form-urlencoded POST body.")
-        params.only("title", "text", "token", "summary", "createonly")
-        if (params.get("createonly") == null) unsupported("Only createonly edits are supported.")
+        val create = params.get("createonly") != null
+        if (create) {
+            params.only("title", "text", "token", "summary", "createonly")
+        } else {
+            params.only("title", "pageid", "text", "token", "summary", "baserevid", "nocreate")
+        }
         if (params.required("token") != "+\\" || request.getHeader("Sec-Fetch-Site") == "cross-site") {
             throw ActionFailure("badtoken", "Invalid CSRF token.")
         }
-        val page = pages.create(actor, request.requestId(), CreatePage(
-            params.required("title"), 0, params.required("text"), params.get("summary").orEmpty(),
-        ))
-        return mapOf("edit" to mapOf(
-            "new" to true, "result" to "Success", "pageid" to page.compatId, "title" to page.title.value,
-            "contentmodel" to "wikitext", "oldrevid" to 0, "newrevid" to page.compatRevisionId,
-            "newtimestamp" to page.createdAt,
-        ))
+        val text = params.required("text")
+        val summary = params.get("summary").orEmpty()
+        val page = if (create) {
+            pages.create(actor, request.requestId(), CreatePage(params.required("title"), 0, text, summary))
+        } else {
+            val lookup = lookup(params.get("title"), params.get("pageid"))
+            val base = RevisionBase.Compat(positiveInteger(params.required("baserevid"), "baserevid"))
+            pages.edit(actor, request.requestId(), EditPage(lookup, base, text, summary))
+        }
+        return mapOf("edit" to buildMap {
+            if (create) put("new", true)
+            putAll(mapOf(
+                "result" to "Success", "pageid" to page.compatId, "title" to page.title.value,
+                "contentmodel" to "wikitext", "oldrevid" to (page.compatParentRevisionId ?: 0L),
+                "newrevid" to page.compatRevisionId, "newtimestamp" to page.createdAt,
+            ))
+        })
     }
 
     private fun query(actor: PageActor, params: ActionParams): Map<String, Any> {
@@ -72,13 +87,7 @@ class MediaWikiAction(private val pages: PageApplicationService, private val htt
         ) unsupported("Only the current revision and explicit main slot are supported.")
 
         val title = params.get("titles")
-        val id = params.get("pageids")
-        if ((title == null) == (id == null) || title?.contains('|') == true) {
-            throw ActionFailure("invalidparammix", "Specify a single title or page ID.")
-        }
-        val lookup = if (title != null) PageLookup.Title(title) else PageLookup.CompatId(
-            id?.toLongOrNull()?.takeIf { it > 0 } ?: throw ActionFailure("badinteger", "Invalid page ID."),
-        )
+        val lookup = lookup(title, params.get("pageids"))
         val result = try {
             pages.read(actor, lookup)
         } catch (failure: PageFailure) {
@@ -97,7 +106,8 @@ class MediaWikiAction(private val pages: PageApplicationService, private val htt
                 if ("info" in props) {
                     putAll(info())
                     putAll(mapOf("touched" to page.createdAt, "lastrevid" to page.compatRevisionId,
-                        "length" to page.source.toByteArray().size, "new" to true))
+                        "length" to page.source.toByteArray().size))
+                    if (page.compatParentRevisionId == null) put("new", true)
                 }
                 if ("revisions" in props) put("revisions", listOf(revision(page, fields)))
             }
@@ -113,7 +123,7 @@ class MediaWikiAction(private val pages: PageApplicationService, private val htt
     }
 
     private fun revision(page: Page, fields: Set<String>): Map<String, Any> = buildMap {
-        if ("ids" in fields) putAll(mapOf("revid" to page.compatRevisionId, "parentid" to 0))
+        if ("ids" in fields) putAll(mapOf("revid" to page.compatRevisionId, "parentid" to (page.compatParentRevisionId ?: 0L)))
         if ("timestamp" in fields) put("timestamp", page.createdAt)
         val slot = buildMap {
             if ("contentmodel" in fields) put("contentmodel", "wikitext")
@@ -129,6 +139,16 @@ class MediaWikiAction(private val pages: PageApplicationService, private val htt
         "pagelanguagehtmlcode" to "en", "pagelanguagedir" to "ltr")
 
     private fun envelope(query: Map<String, Any>) = mapOf("batchcomplete" to true, "query" to query)
+
+    private fun lookup(title: String?, id: String?): PageLookup {
+        if ((title == null) == (id == null) || title?.contains('|') == true) {
+            throw ActionFailure("invalidparammix", "Specify a single title or page ID.")
+        }
+        return if (title != null) PageLookup.Title(title) else PageLookup.CompatId(positiveInteger(checkNotNull(id), "pageid"))
+    }
+
+    private fun positiveInteger(value: String, name: String): Long =
+        value.toLongOrNull()?.takeIf { it > 0 } ?: throw ActionFailure("badinteger", "Invalid $name.")
 }
 
 private class ActionParams(private val parameters: Map<String, Array<String>>) {
@@ -152,6 +172,12 @@ class MediaWikiActionErrors {
     @ExceptionHandler(PageFailure::class)
     fun domain(failure: PageFailure, request: HttpServletRequest) = when (failure.error) {
         PageError.EXISTS -> error("articleexists", "The page you tried to create has been created already.")
+        PageError.PAGE_NOT_FOUND -> if (request.getParameter("pageid") == null) {
+            error("missingtitle", "The page you specified doesn't exist.")
+        } else {
+            error("nosuchpageid", "There is no page with the specified ID.")
+        }
+        PageError.EDIT_CONFLICT -> error("editconflict", "Edit conflict.")
         PageError.FORBIDDEN -> if (request.getParameter("action") == "edit") {
             error("permissiondenied", "The page operation is forbidden.")
         } else {

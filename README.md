@@ -1,6 +1,6 @@
 # LibertyWiki
 
-MediaWiki 1.46.2의 코어·기본 배포 확장·스킨 기능을 독립 구현하는 AGPL-3.0-only 위키 프로젝트입니다. PostgreSQL 기반의 [내부 시험용 문서 생성·현재 원문 조회](wiki_design/source/15_PAGE_SOURCE_SLICE.md)를 실행할 수 있습니다. 정식 호환성과 출시 기준은 설계 문서에서 정의합니다.
+MediaWiki 1.46.2의 코어·기본 배포 확장·스킨 기능을 독립 구현하는 AGPL-3.0-only 위키 프로젝트입니다. PostgreSQL 기반의 [내부 시험용 문서 생성·현재 원문 조회·원문 편집](wiki_design/source/15_PAGE_SOURCE_SLICE.md)을 실행할 수 있습니다. 정식 호환성과 출시 기준은 설계 문서에서 정의합니다.
 
 현재 설계는 [문서 안내](wiki_design/source/00_README.md)에서 시작합니다. [제품 기획](wiki_design/source/01_PRODUCT_PLAN.md), [요구사항](wiki_design/source/02_REQUIREMENTS.md), [두 API 계약](wiki_design/source/14_DUAL_API_CONTRACT.md), [아키텍처](wiki_design/source/04_ARCHITECTURE.md), [결정 기록](docs/adr/), [용어집](GLOSSARY.md)을 순서대로 참고합니다.
 
@@ -24,7 +24,7 @@ export WIKI_HTTP_OPERATOR_TOKEN='replace-with-a-random-local-token'
 ./gradlew bootRun
 ```
 
-[http://127.0.0.1:8080](http://127.0.0.1:8080)에서 운영자 토큰을 입력해 문서를 생성하고 제목으로 조회합니다. 기본값은 루프백 바인딩, 익명 읽기 허용, 익명 편집·생성 거부입니다. 내부 시험 정책은 `WIKI_ANONYMOUS_READ`, `WIKI_ANONYMOUS_EDIT`, `WIKI_ANONYMOUS_CREATE`로 설정합니다. 익명 생성에는 세 값이 모두 `true`여야 합니다. Windows PowerShell에서는 `export KEY=value` 대신 `$env:KEY = 'value'`, `./gradlew` 대신 `.\gradlew.bat`를 사용합니다.
+[http://127.0.0.1:8080](http://127.0.0.1:8080)에서 운영자 토큰을 입력해 문서를 생성하거나 제목으로 조회한 뒤 원문을 편집합니다. 충돌이 발생하면 작성 중인 원문과 요약을 유지한 상태에서 최신 문서를 확인할 수 있습니다. 기본값은 루프백 바인딩, 익명 읽기 허용, 익명 편집·생성 거부입니다. 내부 시험 정책은 `WIKI_ANONYMOUS_READ`, `WIKI_ANONYMOUS_EDIT`, `WIKI_ANONYMOUS_CREATE`로 설정합니다. 익명 편집에는 읽기와 편집을, 익명 생성에는 세 가지 정책을 모두 `true`로 설정해야 합니다. Windows PowerShell에서는 `export KEY=value` 대신 `$env:KEY = 'value'`, `./gradlew` 대신 `.\gradlew.bat`를 사용합니다.
 
 ## 검증 실행
 
@@ -36,7 +36,7 @@ export WIKI_TEST_DB_PASSWORD='test-database-password'
 ./gradlew postgresTest
 ```
 
-`postgresTest`와 `mediaWikiTest`는 실행마다 임의의 PostgreSQL 스키마를 생성합니다. 스키마 생성 권한이 있는 계정과 폐기 가능한 시험 DB를 지정합니다. 차등 시험은 별도의 영어 첫 글자 대문자, 익명 읽기·편집·생성 허용 MediaWiki 1.46.2 시험 인스턴스에 문서를 생성합니다.
+`postgresTest`와 `mediaWikiTest`는 실행마다 임의의 PostgreSQL 스키마를 생성합니다. 스키마 생성 권한이 있는 계정과 폐기 가능한 시험 DB를 지정합니다. 차등 시험은 영어 첫 글자 대문자 규칙과 익명 읽기·편집·생성을 허용하는 별도의 MediaWiki 1.46.2 시험 인스턴스에 문서를 생성하고 편집합니다.
 
 ```bash
 export WIKI_MW_BASE_URL=http://127.0.0.1:18763

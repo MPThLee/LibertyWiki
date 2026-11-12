@@ -25,6 +25,25 @@ class MediaWikiPageContractTest {
 
     @Test
     fun `compares documented creation and source contracts against MediaWiki 1_46_2`() {
+        val baseline = baseline()
+        val local = ContractHttp("http://127.0.0.1:$port")
+        val suffix = UUID.randomUUID().toString()
+        val actionTitle = "Action $suffix"
+        val restTitle = "Rest $suffix"
+        val missingTitle = "Missing $suffix"
+        assertThat(observe(local, actionTitle, restTitle, missingTitle))
+            .isEqualTo(observe(baseline, actionTitle, restTitle, missingTitle))
+    }
+
+    @Test
+    fun `compares successful existing page updates and overlapping edits against MediaWiki 1_46_2`() {
+        val baseline = baseline()
+        val local = ContractHttp("http://127.0.0.1:$port")
+        val title = "Edit_${UUID.randomUUID()}"
+        assertThat(observeEdit(local, title)).isEqualTo(observeEdit(baseline, title))
+    }
+
+    private fun baseline(): ContractHttp {
         val baseline = ContractHttp(
             checkNotNull(System.getenv("WIKI_MW_BASE_URL")) { "Set WIKI_MW_BASE_URL to a disposable MediaWiki 1.46.2 server." }
                 .trimEnd('/'),
@@ -34,15 +53,41 @@ class MediaWikiPageContractTest {
         assertThat(general["generator"].asText()).isEqualTo("MediaWiki 1.46.2")
         assertThat(general["lang"].asText()).isEqualTo("en")
         assertThat(general["case"].asText()).isEqualTo("first-letter")
-        val local = ContractHttp("http://127.0.0.1:$port")
+        return baseline
+    }
 
-        val suffix = UUID.randomUUID().toString()
-        val actionTitle = "Action $suffix"
-        val restTitle = "Rest $suffix"
-        val missingTitle = "Missing $suffix"
-        val expected = observe(baseline, actionTitle, restTitle, missingTitle)
-        val actual = observe(local, actionTitle, restTitle, missingTitle)
-        assertThat(actual).isEqualTo(expected)
+    private fun observeEdit(http: ContractHttp, title: String): Map<String, Any> {
+        val original = http.actionCreate(title, "Original").json.at("/edit/newrevid").asLong()
+        assertThat(original).isPositive()
+        val action = http.actionEdit("title" to title, "Action edit", original)
+        val saved = action.json["edit"]
+        assertThat(action.status).isEqualTo(200)
+        assertThat(saved["result"].asText()).isEqualTo("Success")
+        assertThat(saved["oldrevid"].asLong()).isEqualTo(original)
+        val actionId = saved["newrevid"].asLong()
+        assertThat(actionId).isNotEqualTo(original)
+
+        val rest = http.restEdit(title, "REST edit", actionId)
+        assertThat(rest.status).isEqualTo(200)
+        assertThat(rest.json["source"].asText()).isEqualTo("REST edit")
+        val revision = readAction(http, title).at("/query/pages/0/revisions/0")
+        assertThat(revision["revid"]).isEqualTo(rest.json.at("/latest/id"))
+        assertThat(revision["parentid"].asLong()).isEqualTo(actionId)
+        assertThat(revision.at("/slots/main/content").asText()).isEqualTo("REST edit")
+
+        val staleAction = http.actionEdit("title" to title, "Conflicting Action edit", actionId)
+        val staleRest = http.restEdit(title, "Conflicting REST edit", actionId)
+        assertThat(http.restRead(title).json.at("/latest/id")).isEqualTo(revision["revid"])
+        val missing = "${title}_Missing"
+        return mapOf(
+            "action" to saved.select("result", "title", "contentmodel"),
+            "rest" to rest.json.select("title", "key", "content_model", "source"),
+            "actionConflict" to (staleAction.status to staleAction.json.at("/error/code").asText()),
+            "restConflict" to restError(staleRest),
+            "actionMissingTitle" to http.actionEdit("title" to missing, "Missing", actionId)
+                .json.at("/error/code").asText(),
+            "restMissingTitle" to restError(http.restEdit(missing, "Missing", actionId)),
+        )
     }
 
     private fun observe(http: ContractHttp, actionTitle: String, restTitle: String, missingTitle: String): Map<String, Any> {

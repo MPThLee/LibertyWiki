@@ -15,8 +15,10 @@ import wiki.liberty.adapter.api.PageHttp
 import wiki.liberty.adapter.api.PageHttpSettings
 import wiki.liberty.adapter.api.requestId
 import wiki.liberty.application.CreatePage
+import wiki.liberty.application.EditPage
 import wiki.liberty.application.PageActor
 import wiki.liberty.application.PageApplicationService
+import wiki.liberty.application.RevisionBase
 import wiki.liberty.domain.Page
 import wiki.liberty.domain.PageError
 import wiki.liberty.domain.PageFailure
@@ -33,6 +35,15 @@ data class RestCreatePage(
 )
 
 data class RestLatest(val id: Long, val timestamp: Instant)
+data class RestEditBase(val id: Long)
+data class RestEditPage(
+    val source: String,
+    val comment: String,
+    val latest: RestEditBase,
+    @JsonProperty("content_model") val contentModel: String = "wikitext",
+    val token: String? = null,
+)
+
 data class RestLicense(val url: String, val title: String)
 data class RestSourcePage(
     val id: Long,
@@ -62,19 +73,37 @@ class MediaWikiPages(
 ) {
     @PostMapping
     fun create(@RequestBody body: RestCreatePage, request: HttpServletRequest): ResponseEntity<RestSourcePage> {
+        val actor = authorizeWrite(request, body.token, body.contentModel)
+        val page = pages.create(actor, request.requestId(), CreatePage(body.title, 0, body.source, body.comment))
+        return ResponseEntity.created(location(page)).body(page.rest())
+    }
+
+    @PutMapping("/{title}")
+    fun edit(
+        @PathVariable title: String, @RequestBody body: RestEditPage, request: HttpServletRequest,
+    ): RestSourcePage {
+        val actor = authorizeWrite(request, body.token, body.contentModel)
+        if (';' in request.requestURI) throw PageFailure(PageError.INVALID_TITLE)
+        if (body.latest.id <= 0) {
+            throw RestFailure(HttpStatus.BAD_REQUEST, "rest-body-validation-error", "latest.id must be positive.")
+        }
+        val command = EditPage(PageLookup.Title(title), RevisionBase.Compat(body.latest.id), body.source, body.comment)
+        return pages.edit(actor, request.requestId(), command).rest()
+    }
+
+    private fun authorizeWrite(request: HttpServletRequest, token: String?, contentModel: String): PageActor {
         if (request.contentType?.substringBefore(';')?.equals(MediaType.APPLICATION_JSON_VALUE, ignoreCase = true) != true) {
             throw HttpMediaTypeNotSupportedException("Expected application/json.")
         }
         val actor = http.actor(request)
         pages.requireRead(actor)
-        if (actor == PageActor.ANONYMOUS && (body.token != "+\\" || request.getHeader("Sec-Fetch-Site") == "cross-site")) {
+        if (actor == PageActor.ANONYMOUS && (token != "+\\" || request.getHeader("Sec-Fetch-Site") == "cross-site")) {
             throw RestFailure(HttpStatus.FORBIDDEN, "rest-badtoken", "A valid token is required for anonymous writes.")
         }
-        if (body.contentModel != "wikitext") {
+        if (contentModel != "wikitext") {
             throw RestFailure(HttpStatus.BAD_REQUEST, "rest-bad-content-model", "Only Wikitext is supported.")
         }
-        val page = pages.create(actor, request.requestId(), CreatePage(body.title, 0, body.source, body.comment))
-        return ResponseEntity.created(location(page)).body(page.rest())
+        return actor
     }
 
     @GetMapping("/{title}")
@@ -108,6 +137,8 @@ class MediaWikiRestErrors {
     @ExceptionHandler(PageFailure::class)
     fun domain(failure: PageFailure): ResponseEntity<RestError> = when (failure.error) {
         PageError.EXISTS -> error(HttpStatus.CONFLICT, "apierror-articleexists", "The page you tried to create has been created already.")
+        PageError.PAGE_NOT_FOUND -> error(HttpStatus.NOT_FOUND, "apierror-missingtitle", "The page you specified doesn't exist.")
+        PageError.EDIT_CONFLICT -> error(HttpStatus.CONFLICT, "editconflict", "Edit conflict.")
         PageError.FORBIDDEN -> error(HttpStatus.FORBIDDEN, "rest-permission-denied", "The page operation is forbidden.")
         PageError.INVALID_TITLE -> error(HttpStatus.BAD_REQUEST, "apierror-invalidtitle", "The title is invalid.")
         else -> error(HttpStatus.BAD_REQUEST, "rest-body-validation-error", "The request body is invalid.")
