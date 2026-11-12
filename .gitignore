@@ -15,3 +15,5 @@
 **/test-results/
 /artifacts/
 /tmp/
+/web/dist/
+/web/playwright-report/

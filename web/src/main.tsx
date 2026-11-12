@@ -1,0 +1,120 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+import { useState } from 'react'
+import type { FormEvent } from 'react'
+import { createRoot } from 'react-dom/client'
+import './styles.css'
+
+type SourcePage = {
+  normalizedTitle: string
+  source: string
+}
+
+const errorMessages: Record<string, string> = {
+  FORBIDDEN: '이 작업을 수행할 권한이 없습니다.',
+  INVALID_CREDENTIALS: '운영자 토큰을 확인해 주세요.',
+  INVALID_TITLE: '일반 이름공간에서 사용할 수 있는 제목을 입력해 주세요.',
+  INVALID_SOURCE: '원문은 올바른 유니코드 문자열이어야 하며 UTF-8 기준 1 MiB 이하여야 합니다.',
+  INVALID_SUMMARY: '편집 요약은 500자까지 입력할 수 있습니다.',
+  EXISTS: '이 제목의 문서가 이미 있습니다.',
+  PAGE_NOT_FOUND: '이 제목의 문서를 찾을 수 없습니다.',
+}
+
+async function requestPage(path: string, token: string, body?: object): Promise<SourcePage> {
+  const headers = new Headers({ Accept: 'application/json' })
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+  if (body) headers.set('Content-Type', 'application/json')
+  const response = await fetch(path, {
+    method: body ? 'POST' : 'GET',
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(15_000),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(errorMessages[error.code] ?? '요청을 처리할 수 없습니다.')
+  }
+  return response.json()
+}
+
+function App() {
+  const [token, setToken] = useState('')
+  const [page, setPage] = useState<SourcePage>()
+  const [error, setError] = useState('')
+  const [status, setStatus] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function submit(event: FormEvent<HTMLFormElement>, create: boolean) {
+    event.preventDefault()
+    const fields = new FormData(event.currentTarget)
+    const title = String(fields.get('title'))
+    setError('')
+    setStatus('요청 처리 중')
+    setPage(undefined)
+    setBusy(true)
+    try {
+      if (!create && (title === '.' || title === '..')) throw new Error(errorMessages.INVALID_TITLE)
+      const result = create
+        ? await requestPage('/api/v1/pages', token, {
+          title,
+          namespaceId: 0,
+          source: String(fields.get('source')),
+          summary: String(fields.get('summary')),
+        })
+        : await requestPage(`/api/v1/pages/by-title/${encodeURIComponent(title)}`, token)
+      setPage(result)
+      setStatus(create ? '문서를 만들었습니다.' : '현재 원문을 불러왔습니다.')
+    } catch (failure) {
+      if (failure instanceof DOMException && failure.name === 'TimeoutError') {
+        setError('응답 시간이 초과되었습니다.')
+      } else {
+        setError(failure instanceof Error ? failure.message : '요청을 처리할 수 없습니다.')
+      }
+      setStatus('')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <header>
+        <div className="brand">LibertyWiki</div>
+      </header>
+      <main>
+        <h1>문서 원문</h1>
+        <label className="credential">
+          운영자 토큰 (권한이 필요한 경우)
+          <input type="password" autoComplete="off" value={token} onChange={event => setToken(event.target.value)} />
+        </label>
+        <div className="forms">
+          <form onSubmit={event => void submit(event, false)}>
+            <h2>제목으로 찾기</h2>
+            <label>조회할 제목<input name="title" required /></label>
+            <button disabled={busy}>원문 조회</button>
+          </form>
+          <form onSubmit={event => void submit(event, true)}>
+            <h2>새 문서 만들기</h2>
+            <label>새 문서 제목<input name="title" required /></label>
+            <label>Wikitext 원문<textarea name="source" rows={8} spellCheck={false} /></label>
+            <label>편집 요약 (선택)<input name="summary" maxLength={500} /></label>
+            <button disabled={busy}>문서 생성</button>
+          </form>
+        </div>
+        <div role="status">{status}</div>
+        <div role="alert">{error}</div>
+        {page && (
+          <section aria-labelledby="result-title">
+            <h2 id="result-title">{page.normalizedTitle}</h2>
+            <pre aria-label="현재 Wikitext 원문">{page.source}</pre>
+          </section>
+        )}
+      </main>
+      <footer>
+        <a href="https://github.com/fregmented/LibertyWiki">LibertyWiki 소스 코드 · AGPL-3.0-only</a>
+      </footer>
+    </>
+  )
+}
+
+const container = document.getElementById('root')
+if (container) createRoot(container).render(<App />)

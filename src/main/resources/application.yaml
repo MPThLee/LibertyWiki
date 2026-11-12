@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+server:
+  address: ${WIKI_BIND_ADDRESS:127.0.0.1}
+  tomcat:
+    max-http-form-post-size: 7MB
+    connection-timeout: 10s
+spring:
+  datasource:
+    url: ${WIKI_DB_URL:jdbc:postgresql://127.0.0.1:5432/libertywiki}
+    username: ${WIKI_DB_USER:libertywiki}
+    password: ${WIKI_DB_PASSWORD:}
+    hikari:
+      connection-timeout: 3000
+      data-source-properties:
+        connectTimeout: 3
+        socketTimeout: 10
+        options: "-c statement_timeout=5000 -c lock_timeout=4000"
+  jdbc:
+    template:
+      query-timeout: 5s
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+      fail-on-null-for-primitives: true
+      fail-on-trailing-tokens: true
+      accept-float-as-int: false
+    mapper:
+      allow-coercion-of-scalars: false
+wiki:
+  pages:
+    anonymous-read: ${WIKI_ANONYMOUS_READ:true}
+    anonymous-edit: ${WIKI_ANONYMOUS_EDIT:false}
+    anonymous-create: ${WIKI_ANONYMOUS_CREATE:false}
+  http:
+    operator-token: ${WIKI_HTTP_OPERATOR_TOKEN:}
+    license-url: ${WIKI_CONTENT_LICENSE_URL:}
+    license-title: ${WIKI_CONTENT_LICENSE_TITLE:}

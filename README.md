@@ -1,6 +1,6 @@
 # LibertyWiki
 
-MediaWiki 1.46.2의 코어·기본 배포 확장·스킨 기능을 독립 구현하는 AGPL-3.0-only 위키 프로젝트입니다. 현재 저장소는 **승인된 설계와 계약 초안 단계**이며 실행 엔진이나 호환성 시험 완료를 뜻하지 않습니다.
+MediaWiki 1.46.2의 코어·기본 배포 확장·스킨 기능을 독립 구현하는 AGPL-3.0-only 위키 프로젝트입니다. PostgreSQL 기반의 [내부 시험용 문서 생성·현재 원문 조회](wiki_design/source/15_PAGE_SOURCE_SLICE.md)를 실행할 수 있습니다. 정식 호환성과 출시 기준은 설계 문서에서 정의합니다.
 
 현재 설계는 [문서 안내](wiki_design/source/00_README.md)에서 시작합니다. [제품 기획](wiki_design/source/01_PRODUCT_PLAN.md), [요구사항](wiki_design/source/02_REQUIREMENTS.md), [두 API 계약](wiki_design/source/14_DUAL_API_CONTRACT.md), [아키텍처](wiki_design/source/04_ARCHITECTURE.md), [결정 기록](docs/adr/), [용어집](GLOSSARY.md)을 순서대로 참고합니다.
 
@@ -9,3 +9,50 @@ MediaWiki 1.46.2의 코어·기본 배포 확장·스킨 기능을 독립 구현
 LibertyWiki 실행물과 Docker 이미지는 ARM64·x86-64를 지원하도록 개발합니다. 외부 DBMS·OpenSearch·Redis 등 인프라의 실행환경은 프로젝트 실행환경과 독립적이며, 오케스트레이션은 사용자가 선택합니다.
 
 저장소에는 설계문서·계약, 이슈트래커, 소스코드와 필요한 개발 설정만 보관합니다. 검증 결과·실행 로그·중간파일·생성된 통합본은 저장소에 추가하지 않습니다. 현재 결정은 `wiki_design/source/`, `wiki_design/specs/`, `docs/adr/`를 따릅니다.
+
+## 내부 시험 환경 실행
+
+JDK 21, Node.js 22.12 이상 및 UTF-8 PostgreSQL 17 데이터베이스를 준비합니다. 초기 테이블은 Flyway가 생성합니다. 아래 명령에서 연결 정보와 운영자 토큰을 시험 환경 값으로 바꿉니다.
+
+```bash
+npm ci --prefix web
+npm run build --prefix web
+export WIKI_DB_URL=jdbc:postgresql://127.0.0.1:5432/libertywiki
+export WIKI_DB_USER=libertywiki
+export WIKI_DB_PASSWORD='test-database-password'
+export WIKI_HTTP_OPERATOR_TOKEN='replace-with-a-random-local-token'
+./gradlew bootRun
+```
+
+[http://127.0.0.1:8080](http://127.0.0.1:8080)에서 운영자 토큰을 입력해 문서를 생성하고 제목으로 조회합니다. 기본값은 루프백 바인딩, 익명 읽기 허용, 익명 편집·생성 거부입니다. 내부 시험 정책은 `WIKI_ANONYMOUS_READ`, `WIKI_ANONYMOUS_EDIT`, `WIKI_ANONYMOUS_CREATE`로 설정합니다. 익명 생성에는 세 값이 모두 `true`여야 합니다. Windows PowerShell에서는 `export KEY=value` 대신 `$env:KEY = 'value'`, `./gradlew` 대신 `.\gradlew.bat`를 사용합니다.
+
+## 검증 실행
+
+```bash
+./gradlew test check
+export WIKI_TEST_DB_URL=jdbc:postgresql://127.0.0.1:5432/libertywiki_test
+export WIKI_TEST_DB_USER=libertywiki
+export WIKI_TEST_DB_PASSWORD='test-database-password'
+./gradlew postgresTest
+```
+
+`postgresTest`와 `mediaWikiTest`는 실행마다 임의의 PostgreSQL 스키마를 생성합니다. 스키마 생성 권한이 있는 계정과 폐기 가능한 시험 DB를 지정합니다. 차등 시험은 별도의 영어 첫 글자 대문자, 익명 읽기·편집·생성 허용 MediaWiki 1.46.2 시험 인스턴스에 문서를 생성합니다.
+
+```bash
+export WIKI_MW_BASE_URL=http://127.0.0.1:18763
+export WIKI_MW_SCRIPT_PATH=/w
+./gradlew mediaWikiTest
+```
+
+MediaWiki의 스크립트가 서버 루트에 있다면 `WIKI_MW_SCRIPT_PATH`를 빈 문자열로 지정합니다. 브라우저 시험은 기본 익명 정책으로 시작한 LibertyWiki 서버와 같은 운영자 토큰을 사용합니다.
+
+```bash
+npm exec --prefix web -- playwright install chromium
+export WIKI_BROWSER_URL=http://127.0.0.1:8080
+export WIKI_BROWSER_TOKEN="$WIKI_HTTP_OPERATOR_TOKEN"
+npm test --prefix web
+```
+
+설치된 Chrome을 사용하는 경우 `WIKI_BROWSER_CHANNEL=chrome`을 지정합니다.
+
+프로젝트 소스는 [AGPL-3.0-only](LICENSE)를 따릅니다. [Gradle Wrapper](https://gradle.org/release-checksums/)와 [Spring Boot](https://github.com/spring-projects/spring-boot/blob/main/LICENSE.txt), [Kotlin](https://github.com/JetBrains/kotlin/blob/master/license/LICENSE.txt)은 Apache-2.0, [PostgreSQL JDBC](https://github.com/pgjdbc/pgjdbc/blob/master/LICENSE)는 BSD-2-Clause, [React](https://github.com/facebook/react/blob/main/LICENSE)와 [Vite](https://github.com/vitejs/vite/blob/main/LICENSE)는 MIT 라이선스입니다.

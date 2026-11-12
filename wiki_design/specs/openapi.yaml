@@ -30,6 +30,10 @@ paths:
       - Pages
       summary: 문서 생성
       operationId: createPage
+      description: 내부 시험용 일반 이름공간 Wikitext 생성. 같은 정규화 제목으로 다시 요청하면 409가 반환된다.
+      security:
+      - bearerAuth: []
+      - {}
       requestBody:
         required: true
         content:
@@ -39,14 +43,27 @@ paths:
       responses:
         '201':
           description: Created
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri-reference
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Page'
+                $ref: '#/components/schemas/CurrentSourcePage'
+        '400':
+          $ref: '#/components/responses/Invalid'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '409':
           $ref: '#/components/responses/Conflict'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/Invalid'
   /pages/{pageId}/revisions:
     get:
       tags:
@@ -244,8 +261,38 @@ paths:
       - Pages
       summary: CAP-PAGE-READ-TITLE
       operationId: getPageByTitle
+      security:
+      - bearerAuth: []
+      - {}
       parameters:
       - name: title
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Current Wikitext source
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentSourcePage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Invalid'
+  /revisions/{revisionId}:
+    get:
+      tags:
+      - Revisions
+      summary: CAP-REVISION-READ
+      operationId: getRevision
+      parameters:
+      - name: revisionId
         in: path
         required: true
         schema:
@@ -263,26 +310,6 @@ paths:
           description: Conflict
         '422': &id005
           description: Unprocessable Entity
-  /revisions/{revisionId}:
-    get:
-      tags:
-      - Revisions
-      summary: CAP-REVISION-READ
-      operationId: getRevision
-      parameters:
-      - name: revisionId
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        '200':
-          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
-        '401': *id001
-        '403': *id002
-        '404': *id003
-        '409': *id004
-        '422': *id005
   /pages/{pageId}/moves:
     post:
       tags:
@@ -316,6 +343,9 @@ paths:
       - Pages
       summary: 문서 조회
       operationId: getPage
+      security:
+      - bearerAuth: []
+      - {}
       parameters:
       - $ref: '#/components/parameters/PageId'
       responses:
@@ -324,7 +354,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Page'
+                $ref: '#/components/schemas/CurrentSourcePage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Invalid'
         '404':
           $ref: '#/components/responses/NotFound'
     delete:
@@ -1063,6 +1099,19 @@ components:
           type:
           - string
           - 'null'
+    CurrentSourcePage:
+      allOf:
+      - $ref: '#/components/schemas/Page'
+      - type: object
+        required: [source, contentModel, createdAt]
+        properties:
+          source:
+            type: string
+          contentModel:
+            const: wikitext
+          createdAt:
+            type: string
+            format: date-time
     Revision:
       type: object
       required:
@@ -1091,6 +1140,7 @@ components:
           type: string
     CreatePageRequest:
       type: object
+      additionalProperties: false
       required:
       - title
       - namespaceId
@@ -1101,10 +1151,13 @@ components:
           minLength: 1
         namespaceId:
           type: integer
+          const: 0
         source:
           type: string
+          description: UTF-8 기준 최대 1048576바이트의 Wikitext
         summary:
           type: string
+          maxLength: 500
     RevisionRequest:
       type: object
       required:
@@ -1137,6 +1190,16 @@ components:
         details:
           type: object
   responses:
+    Unauthorized:
+      description: Invalid Bearer credential
+      headers:
+        WWW-Authenticate:
+          schema:
+            const: Bearer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
     Conflict:
       description: Conflict
       content:
@@ -1157,6 +1220,12 @@ components:
             $ref: '#/components/schemas/Error'
     Invalid:
       description: Validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    UnsupportedMediaType:
+      description: Expected application/json
       content:
         application/json:
           schema:
