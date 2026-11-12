@@ -46,6 +46,9 @@ internal class ContractHttp(private val base: String, private val scriptPath: St
     fun restRead(title: String, auth: String? = null) =
         get(restPage(title), auth)
 
+    fun restHistory(title: String, auth: String? = null, query: String = "") = get("${restPage(title)}/history$query", auth)
+    fun restRevision(id: Long, auth: String? = null) = get("$scriptPath/rest.php/v1/revision/$id", auth)
+
     fun restEdit(title: String, source: String, base: Long, token: String? = csrfToken, auth: String? = null): Result {
         val body = mutableMapOf<String, Any>("source" to source, "latest" to mapOf("id" to base), "comment" to "Edit summary")
         if (token != null) body["token"] = token

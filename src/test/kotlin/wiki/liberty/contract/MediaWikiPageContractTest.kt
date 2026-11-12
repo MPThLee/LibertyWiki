@@ -43,6 +43,80 @@ class MediaWikiPageContractTest {
         assertThat(observeEdit(local, title)).isEqualTo(observeEdit(baseline, title))
     }
 
+    @Test
+    fun `compares revision history and old source against MediaWiki 1_46_2`() {
+        val baseline = baseline()
+        val local = ContractHttp("http://127.0.0.1:$port")
+        val title = "History_${UUID.randomUUID()}"
+        assertThat(observeHistory(local, title)).isEqualTo(observeHistory(baseline, title))
+    }
+
+    private fun observeHistory(http: ContractHttp, title: String): Map<String, Any> {
+        val first = http.actionCreate(title, "First source").json.at("/edit/newrevid").asLong()
+        val second = http.actionEdit("title" to title, "Second source", first).json.at("/edit/newrevid").asLong()
+        val third = http.actionEdit("title" to title, "Third source", second).json.at("/edit/newrevid").asLong()
+        assertThat(listOf(first, second, third)).doesNotHaveDuplicates().allMatch { it > 0 }
+        fun history(vararg extra: Pair<String, String>) = http.actionQuery(
+            "prop" to "revisions", "titles" to title, "rvprop" to "ids|timestamp|size", *extra,
+        ).json
+        val page = history("rvlimit" to "2")
+        val revisions = page.at("/query/pages/0/revisions")
+        assertThat(revisions.map { it["revid"].asLong() }).containsExactly(third, second)
+        val cursor = page.at("/continue/rvcontinue").asText()
+        assertThat(cursor).matches("[0-9]{14}\\|$first")
+        val next = history("rvlimit" to "2", "rvcontinue" to cursor, "continue" to page.at("/continue/continue").asText())
+        assertThat(next.at("/query/pages/0/revisions").map { it["revid"].asLong() }).containsExactly(first)
+        assertThat(revisions.map { it["parentid"].asLong() }).containsExactly(second, first)
+        val byId = http.actionQuery("prop" to "revisions", "revids" to first.toString(),
+            "rvslots" to "main", "rvprop" to "ids|content")
+        assertThat(byId.json.at("/query/pages/0/revisions/0/revid").asLong()).isEqualTo(first)
+        assertThat(byId.json.at("/query/pages/0/revisions/0/slots/main/contentmodel").asText()).isEqualTo("wikitext")
+        assertThat(history("continue" to "invalid").at("/error/code").asText()).isEqualTo("badcontinue")
+        val pageId = page.at("/query/pages/0/pageid").asText()
+        val byPageId = http.actionQuery("prop" to "revisions", "pageids" to pageId,
+            "rvslots" to "main", "rvprop" to revisionFields)
+        assertThat(byPageId.json.at("/query/pages/0/revisions/0/revid").asLong()).isEqualTo(third)
+        val restOld = http.restRevision(first)
+        assertThat(restOld.status).isEqualTo(200)
+        assertThat(restOld.json["id"].asLong()).isEqualTo(first)
+        val restHistory = http.restHistory(title)
+        assertThat(restHistory.status).isEqualTo(200)
+        assertThat(restHistory.json["revisions"].map { it["id"].asLong() }).containsExactly(third, second, first)
+        val older = http.restHistory(title, query = "?older_than=$third")
+        assertThat(older.json["revisions"].map { it["id"].asLong() }).containsExactly(second, first)
+        assertThat(older.json["newer"].asText()).endsWith("?newer_than=$second")
+        val newer = http.restHistory(title, query = "?newer_than=$first")
+        assertThat(newer.json["revisions"].map { it["id"].asLong() }).containsExactly(third, second)
+        assertThat(newer.json["older"].asText()).endsWith("?older_than=$second")
+        val missingId = 999999999
+        val missingAction = http.actionQuery("prop" to "revisions", "revids" to missingId.toString())
+        assertThat(missingAction.json.at("/query/badrevids/$missingId/missing").asBoolean()).isTrue()
+        val missingRest = http.restRevision(missingId.toLong())
+        assertThat(missingRest.status).isEqualTo(404)
+        assertThat(missingRest.json["errorKey"].asText()).isEqualTo("rest-nonexistent-revision")
+        val unknownAnchor = http.restHistory(title, query = "?older_than=$missingId")
+        assertThat(unknownAnchor.status).isEqualTo(404)
+        assertThat(unknownAnchor.json["errorKey"].asText()).isEqualTo("rest-nonexistent-title-revision")
+        val malformedAnchor = http.restHistory(title, query = "?older_than=invalid")
+        assertThat(malformedAnchor.status).isEqualTo(400)
+        assertThat(malformedAnchor.json["name"].asText()).isEqualTo("older_than")
+        assertThat(malformedAnchor.json["failureCode"].asText()).isEqualTo("badinteger")
+        val zeroAnchor = http.restHistory(title, query = "?older_than=0")
+        assertThat(zeroAnchor.status).isEqualTo(400)
+        assertThat(zeroAnchor.json["errorKey"].asText()).isEqualTo("rest-pagehistory-param-range-error")
+        val canonical = http.restHistory(title.replaceFirstChar { it.lowercaseChar() }, query = "?older_than=$missingId")
+        assertThat(canonical.status).isEqualTo(301)
+        assertThat(canonical.header("Location")).endsWith("/$title/history?older_than=$missingId")
+        return mapOf(
+            "actionSizes" to revisions.map { it["size"].asInt() },
+            "oldActionSource" to byId.json.at("/query/pages/0/revisions/0/slots/main/content").asText(),
+            "oldRestSource" to restOld.json["source"].asText(),
+            "restHistoryCount" to restHistory.json["revisions"].size(),
+            "restContentModel" to restOld.json["content_model"].asText(),
+            "restHistoryDeltas" to restHistory.json["revisions"].map { it["delta"] },
+        )
+    }
+
     private fun baseline(): ContractHttp {
         val baseline = ContractHttp(
             checkNotNull(System.getenv("WIKI_MW_BASE_URL")) { "Set WIKI_MW_BASE_URL to a disposable MediaWiki 1.46.2 server." }

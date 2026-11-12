@@ -9,6 +9,10 @@ import wiki.liberty.domain.PageError
 import wiki.liberty.domain.PageFailure
 import wiki.liberty.domain.PageLookup
 import wiki.liberty.domain.PageTitle
+import wiki.liberty.domain.RevisionLookup
+import wiki.liberty.domain.RevisionMetadata
+import wiki.liberty.domain.RevisionPage
+import wiki.liberty.domain.RevisionSource
 import wiki.liberty.domain.validUnicode
 import java.security.MessageDigest
 import java.time.Instant
@@ -33,12 +37,70 @@ sealed interface RevisionBase {
 }
 
 data class PageRead(val page: Page?, val normalizedTitle: PageTitle? = null)
+data class HistoryRequest(
+    val page: PageLookup,
+    val limit: Int,
+    val anchor: RevisionLookup? = null,
+    val direction: HistoryDirection = HistoryDirection.OLDER,
+    val inclusive: Boolean = false,
+    val anchorTime: Instant? = null,
+    val includeCurrent: Boolean = false,
+)
+
+data class RevisionHistory(
+    val page: RevisionPage,
+    val revisions: List<RevisionMetadata>,
+    val next: RevisionMetadata?,
+    val hasNewer: Boolean,
+    val hasOlder: Boolean,
+    val current: RevisionMetadata?,
+)
 
 @Service
 class PageApplicationService(private val repository: PageRepository, private val policy: PagePolicy) {
     fun read(actor: PageActor, lookup: PageLookup): PageRead {
         requireRead(actor)
         return find(lookup)
+    }
+
+    fun readRevision(actor: PageActor, lookup: RevisionLookup): RevisionSource {
+        requireRead(actor)
+        return repository.findRevision(lookup) ?: throw PageFailure(PageError.REVISION_NOT_FOUND)
+    }
+
+    fun revisionPage(actor: PageActor, lookup: PageLookup): RevisionPage {
+        requireRead(actor)
+        val normalized = if (lookup is PageLookup.Title) PageLookup.Title(parseTitle(lookup.input).value) else lookup
+        return repository.findRevisionPage(normalized) ?: throw PageFailure(PageError.PAGE_NOT_FOUND)
+    }
+
+    @Transactional(readOnly = true, timeout = 8)
+    fun history(actor: PageActor, request: HistoryRequest): RevisionHistory {
+        requireRead(actor)
+        if (request.limit !in 1..50) throw PageFailure(PageError.INVALID_LIMIT)
+        val page = revisionPage(actor, request.page)
+        val anchor = request.anchor?.let {
+            repository.findHistoryAnchor(page, it) ?: throw PageFailure(PageError.INVALID_CURSOR)
+        }
+        if (request.anchorTime != null && request.anchorTime != anchor?.createdAt) {
+            throw PageFailure(PageError.INVALID_CURSOR)
+        }
+        val matches = repository.findHistory(
+            page, HistoryWindow(anchor, request.direction, request.inclusive), request.limit + 1,
+        )
+        val next = matches.getOrNull(request.limit)
+        val revisions = matches.take(request.limit)
+        val older = request.direction == HistoryDirection.OLDER
+        val current = if (request.includeCurrent) {
+            revisions.find { it.id == page.currentRevisionId }
+                ?: repository.findHistoryAnchor(page, RevisionLookup.Id(page.currentRevisionId))
+        } else null
+        return RevisionHistory(
+            page, if (older) revisions else revisions.asReversed(), next,
+            hasNewer = if (older) anchor != null && !request.inclusive else next != null,
+            hasOlder = if (older) next != null else anchor != null,
+            current = current,
+        )
     }
 
     private fun find(lookup: PageLookup): PageRead {

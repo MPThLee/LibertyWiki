@@ -26,7 +26,8 @@
 | CAP-PAGE-READ | `GET /w/api.php?action=query&prop=revisions&titles=...`; `GET /w/rest.php/v1/page/{title}` | `GET /api/v1/pages/{id}` | PageQuery, visibility |
 | CAP-PAGE-CREATE | `POST /w/api.php?action=edit` 및 제공되는 MediaWiki REST page creation | `POST /api/v1/pages` | PageCreateCommand, revision commit |
 | CAP-REVISION-COMMIT | `POST /w/api.php?action=edit`; MediaWiki REST write route(기준 확인) | `POST /api/v1/pages/{id}/revisions` | RevisionCommit, optimistic lock |
-| CAP-REVISION-HISTORY | `GET /w/api.php?action=query&prop=revisions` | `GET /api/v1/pages/{id}/revisions` | RevisionQuery, pagination |
+| CAP-REVISION-HISTORY | `GET /w/api.php?action=query&prop=revisions`, `GET /w/rest.php/v1/page/{title}/history` | `GET /api/v1/pages/{pageId}/revisions` | PageApplicationService, 읽기 권한과 이력 페이지네이션 |
+| CAP-REVISION-READ | `GET /w/api.php?action=query&prop=revisions&revids=...`, `GET /w/rest.php/v1/revision/{id}` | `GET /api/v1/revisions/{revisionId}` | PageApplicationService, 읽기 권한과 고정 revision 원문 |
 | CAP-PAGE-MOVE | `POST /w/api.php?action=move` | `POST /api/v1/pages/{id}/moves` | PageMove, redirect/ACL |
 | CAP-PAGE-PROTECT | `POST /w/api.php?action=protect` | `PUT /api/v1/pages/{id}/protection` | ProtectionPolicy, logs |
 | CAP-PAGE-DELETE | `POST /w/api.php?action=delete` | `DELETE /api/v1/pages/{id}` | PageSoftDelete, audit |

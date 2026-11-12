@@ -23,7 +23,7 @@ sealed interface PageLookup {
 
 enum class PageError {
     FORBIDDEN, INVALID_TITLE, INVALID_NAMESPACE, INVALID_SOURCE, INVALID_SUMMARY, EXISTS,
-    PAGE_NOT_FOUND, EDIT_CONFLICT
+    PAGE_NOT_FOUND, REVISION_NOT_FOUND, INVALID_CURSOR, INVALID_LIMIT, EDIT_CONFLICT
 }
 
 class PageFailure(val error: PageError) : RuntimeException(error.name)

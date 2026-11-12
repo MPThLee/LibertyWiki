@@ -9,13 +9,22 @@ import wiki.liberty.adapter.api.PageHttp
 import wiki.liberty.adapter.api.requestId
 import wiki.liberty.application.CreatePage
 import wiki.liberty.application.EditPage
+import wiki.liberty.application.HistoryRequest
 import wiki.liberty.application.PageActor
 import wiki.liberty.application.PageApplicationService
 import wiki.liberty.application.RevisionBase
-import wiki.liberty.domain.Page
 import wiki.liberty.domain.PageError
 import wiki.liberty.domain.PageFailure
 import wiki.liberty.domain.PageLookup
+import wiki.liberty.domain.PageTitle
+import wiki.liberty.domain.RevisionLookup
+import wiki.liberty.domain.RevisionMetadata
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.time.DateTimeException
+import java.time.format.ResolverStyle
+import java.util.Locale
 
 class ActionFailure(val code: String, message: String) : RuntimeException(message)
 data class ActionErrorEnvelope(val error: ActionError)
@@ -77,59 +86,131 @@ class MediaWikiAction(private val pages: PageApplicationService, private val htt
             if (params.get("type") !in listOf(null, "csrf")) unsupported("Only CSRF tokens are supported.")
             return envelope(mapOf("tokens" to mapOf("csrftoken" to "+\\")))
         }
-        params.only("prop", "titles", "pageids", "rvprop", "rvslots", "rvlimit")
+        params.only("prop", "titles", "pageids", "revids", "rvprop", "rvslots", "rvlimit", "rvcontinue", "continue")
         val props = params.required("prop").split('|').toSet()
         if (!setOf("info", "revisions").containsAll(props)) unsupported("Only info and revisions are supported.")
-        val fields = (params.get("rvprop") ?: "ids|timestamp").split('|').toSet()
-        if (!setOf("ids", "timestamp", "content", "contentmodel").containsAll(fields) ||
-            params.get("rvslots") !in listOf(null, "main") || params.get("rvlimit") !in listOf(null, "1") ||
-            (("content" in fields || "contentmodel" in fields) && params.get("rvslots") != "main")
-        ) unsupported("Only the current revision and explicit main slot are supported.")
+        val fields = (params.get("rvprop") ?: "ids|flags|timestamp|user|comment").split('|').toSet()
+        val withContent = "content" in fields || "contentmodel" in fields
+        if (!setOf("ids", "timestamp", "content", "contentmodel", "comment", "size", "flags", "user", "userid").containsAll(fields) ||
+            params.get("rvslots") !in listOf(null, "main") || (withContent && params.get("rvslots") != "main")
+        ) unsupported("An unsupported revision field or slot was requested.")
 
         val title = params.get("titles")
-        val lookup = lookup(title, params.get("pageids"))
-        val result = try {
-            pages.read(actor, lookup)
-        } catch (failure: PageFailure) {
-            if (failure.error != PageError.INVALID_TITLE) throw failure
-            return envelope(mapOf("pages" to listOf(mapOf(
-                "title" to title.orEmpty(), "invalid" to true, "invalidreason" to "The title is invalid.",
-            ))))
-        }
-        val normalized = result.normalizedTitle?.value
-        val query = mutableMapOf<String, Any>()
-        if (title != null && normalized != null && normalized != title) {
-            query["normalized"] = listOf(mapOf("fromencoded" to false, "from" to title, "to" to normalized))
-        }
-        val entry = result.page?.let { page ->
-            mutableMapOf<String, Any>("pageid" to page.compatId, "ns" to 0, "title" to page.title.value).apply {
-                if ("info" in props) {
-                    putAll(info())
-                    putAll(mapOf("touched" to page.createdAt, "lastrevid" to page.compatRevisionId,
-                        "length" to page.source.toByteArray().size))
-                    if (page.compatParentRevisionId == null) put("new", true)
-                }
-                if ("revisions" in props) put("revisions", listOf(revision(page, fields)))
+        val pageId = params.get("pageids")
+        val limit = params.get("rvlimit")
+        val continuation = params.get("rvcontinue")
+        if (params.get("continue") !in listOf(null, "", "||")) throw PageFailure(PageError.INVALID_CURSOR)
+        val revisionId = params.get("revids")
+        if (revisionId != null) {
+            if (title != null || pageId != null || limit != null || continuation != null || props != setOf("revisions")) {
+                throw ActionFailure("invalidparammix", "Specify a single revision ID with prop=revisions.")
             }
-        } ?: if (lookup is PageLookup.CompatId) {
-            mapOf("pageid" to lookup.value, "missing" to true)
-        } else {
-            mutableMapOf<String, Any>("ns" to 0, "title" to checkNotNull(normalized), "missing" to true).apply {
-                if ("info" in props) putAll(info())
+            return byRevision(actor, positiveInteger(revisionId, "revids"), fields)
+        }
+
+        val lookup = lookup(title, pageId)
+        val count = limit?.let { positiveInteger(it, "rvlimit").coerceAtMost(50).toInt() } ?: 1
+        if ("content" in fields && count > 1) unsupported("Use revids or rvlimit=1 to read revision source.")
+        val anchor = continuation?.let { parseContinuation(it) }
+        val currentOnly = limit == null && continuation == null
+        val history = try {
+            pages.history(actor, HistoryRequest(
+                lookup, count, anchor?.first, inclusive = true, anchorTime = anchor?.second,
+                includeCurrent = currentOnly || "info" in props,
+            ))
+        } catch (failure: PageFailure) {
+            when (failure.error) {
+                PageError.INVALID_TITLE -> return envelope(mapOf("pages" to listOf(mapOf(
+                    "title" to title.orEmpty(), "invalid" to true, "invalidreason" to "The title is invalid.",
+                ))))
+                PageError.PAGE_NOT_FOUND -> return missing(lookup, props)
+                else -> throw failure
+            }
+        }
+        val normalized = history.page.title.value
+        val query = normalizedQuery(title, normalized)
+        val entry = mutableMapOf<String, Any>("pageid" to history.page.compatId, "ns" to 0, "title" to normalized)
+        if ("info" in props) history.current?.let { current ->
+            entry.putAll(info())
+            entry.putAll(mapOf("touched" to current.createdAt, "lastrevid" to current.compatId, "length" to current.size))
+            if (current.parentId == null) entry["new"] = true
+        }
+        val selected = if (currentOnly) listOfNotNull(history.current) else history.revisions
+        if ("revisions" in props && selected.isNotEmpty()) {
+            entry["revisions"] = selected.map {
+                val source = if ("content" in fields) pages.readRevision(actor, RevisionLookup.Id(it.id)).source else null
+                revision(it, fields, source)
             }
         }
         query["pages"] = listOf(entry)
+        val next = history.next
+        if (next != null && "revisions" in props && !currentOnly) {
+            return mapOf("query" to query, "continue" to mapOf(
+                "rvcontinue" to "${actionTimestamp.format(next.createdAt)}|${next.compatId}", "continue" to "||",
+            ))
+        }
         return envelope(query)
     }
 
-    private fun revision(page: Page, fields: Set<String>): Map<String, Any> = buildMap {
-        if ("ids" in fields) putAll(mapOf("revid" to page.compatRevisionId, "parentid" to (page.compatParentRevisionId ?: 0L)))
-        if ("timestamp" in fields) put("timestamp", page.createdAt)
+    private fun byRevision(actor: PageActor, id: Long, fields: Set<String>): Map<String, Any> {
+        val result = try {
+            pages.readRevision(actor, RevisionLookup.CompatId(id))
+        } catch (failure: PageFailure) {
+            if (failure.error != PageError.REVISION_NOT_FOUND) throw failure
+            return envelope(mapOf("badrevids" to mapOf(id.toString() to mapOf("revid" to id, "missing" to true))))
+        }
+        return envelope(mapOf("pages" to listOf(mapOf(
+            "pageid" to result.page.compatId, "ns" to 0, "title" to result.page.title.value,
+            "revisions" to listOf(revision(result.revision, fields, result.source)),
+        ))))
+    }
+
+    private fun parseContinuation(value: String): Pair<RevisionLookup.CompatId, Instant> {
+        val parts = value.split('|', limit = 3)
+        if (parts.size != 2) throw PageFailure(PageError.INVALID_CURSOR)
+        val id = parts[1].toLongOrNull()?.takeIf { it > 0 } ?: throw PageFailure(PageError.INVALID_CURSOR)
+        val timestamp = try {
+            Instant.from(actionTimestamp.parse(parts[0]))
+        } catch (_: DateTimeException) {
+            throw PageFailure(PageError.INVALID_CURSOR)
+        }
+        return RevisionLookup.CompatId(id) to timestamp
+    }
+
+    private fun normalizedQuery(title: String?, normalized: String): MutableMap<String, Any> =
+        mutableMapOf<String, Any>().apply {
+            if (title != null && normalized != title) {
+                put("normalized", listOf(mapOf("fromencoded" to false, "from" to title, "to" to normalized)))
+            }
+        }
+
+    private fun missing(lookup: PageLookup, props: Set<String>): Map<String, Any> {
+        if (lookup is PageLookup.CompatId) {
+            return envelope(mapOf("pages" to listOf(mapOf("pageid" to lookup.value, "missing" to true))))
+        }
+        val title = (lookup as PageLookup.Title).input
+        val normalized = checkNotNull(PageTitle.parse(title)).value
+        val entry = mutableMapOf<String, Any>("ns" to 0, "title" to normalized, "missing" to true)
+        if ("info" in props) entry.putAll(info())
+        return envelope(normalizedQuery(title, normalized).apply { put("pages", listOf(entry)) })
+    }
+
+    private fun revision(revision: RevisionMetadata, fields: Set<String>, source: String?): Map<String, Any> = buildMap {
+        if ("ids" in fields) putAll(mapOf("revid" to revision.compatId, "parentid" to (revision.compatParentId ?: 0L)))
+        if ("timestamp" in fields) put("timestamp", revision.createdAt)
+        if ("flags" in fields) put("minor", false)
+        if ("comment" in fields) put("comment", revision.summary)
+        if ("size" in fields) put("size", revision.size)
+        if ("user" in fields) {
+            put("user", revision.actor)
+            if (revision.actor == "anonymous") put("anon", true)
+        }
+        if ("userid" in fields) put("userid", if (revision.actor == "anonymous") 0 else 1)
         val slot = buildMap {
-            if ("contentmodel" in fields) put("contentmodel", "wikitext")
+            if ("contentmodel" in fields || "content" in fields) put("contentmodel", "wikitext")
             if ("content" in fields) {
                 put("contentformat", "text/x-wiki")
-                put("content", page.source)
+                put("content", checkNotNull(source))
             }
         }
         if (slot.isNotEmpty()) put("slots", mapOf("main" to slot))
@@ -149,6 +230,11 @@ class MediaWikiAction(private val pages: PageApplicationService, private val htt
 
     private fun positiveInteger(value: String, name: String): Long =
         value.toLongOrNull()?.takeIf { it > 0 } ?: throw ActionFailure("badinteger", "Invalid $name.")
+
+    private companion object {
+        val actionTimestamp = DateTimeFormatter.ofPattern("uuuuMMddHHmmss", Locale.ROOT)
+            .withResolverStyle(ResolverStyle.STRICT).withZone(ZoneOffset.UTC)
+    }
 }
 
 private class ActionParams(private val parameters: Map<String, Array<String>>) {
@@ -178,6 +264,7 @@ class MediaWikiActionErrors {
             error("nosuchpageid", "There is no page with the specified ID.")
         }
         PageError.EDIT_CONFLICT -> error("editconflict", "Edit conflict.")
+        PageError.INVALID_CURSOR -> error("badcontinue", "Invalid revision continuation.")
         PageError.FORBIDDEN -> if (request.getParameter("action") == "edit") {
             error("permissiondenied", "The page operation is forbidden.")
         } else {

@@ -36,6 +36,148 @@ class PagePostgresTest {
     private val source = "== Source ==\r\n<script>literal</script>\n"
 
     @Test
+    fun `native revision history returns immutable source newest first`() {
+        val created = http.nativeCreate("History ${UUID.randomUUID()}", source).json
+        val pageId = created["id"].asText()
+        val first = created["currentRevisionId"].asText()
+        val edited = http.postJson("$native/$pageId/revisions",
+            mapOf("baseRevisionId" to first, "source" to "Second", "summary" to "Second edit"), operatorToken).json
+        val second = edited["currentRevisionId"].asText()
+        val history = http.get("$native/$pageId/revisions?limit=1", operatorToken)
+        assertThat(history.status).isEqualTo(200)
+        assertSchema("/paths/~1pages~1{pageId}~1revisions/get/responses/200", history.json)
+        assertThat(history.json.at("/revisions/0/id").asText()).isEqualTo(second)
+        assertThat(history.json["nextCursor"].asText()).isEqualTo(second)
+        val appended = http.postJson("$native/$pageId/revisions",
+            mapOf("baseRevisionId" to second, "source" to "Third"), operatorToken)
+        assertThat(appended.status).isEqualTo(201)
+        val third = appended.json["currentRevisionId"].asText()
+        val beforeReads = rowCounts()
+        val next = http.get("$native/$pageId/revisions?limit=1&cursor=$second", operatorToken)
+        assertThat(next.status).isEqualTo(200)
+        assertThat(next.json.at("/revisions/0/id").asText()).isEqualTo(first)
+        assertThat(next.json["nextCursor"].isNull).isTrue()
+        val old = http.get("/api/v1/revisions/$first", operatorToken)
+        assertThat(old.status).isEqualTo(200)
+        assertSchema("/paths/~1revisions~1{revisionId}/get/responses/200", old.json)
+        assertThat(old.json["source"].asText()).isEqualTo(source)
+        assertThat(old.json["pageId"].asText()).isEqualTo(pageId)
+        assertThat(old.json["normalizedTitle"]).isEqualTo(created["normalizedTitle"])
+        assertThat(old.json["contentModel"].asText()).isEqualTo("wikitext")
+        assertThat(old.json["parentRevisionId"].isNull).isTrue()
+        assertThat(history.json.at("/revisions/0/parentRevisionId").asText()).isEqualTo(first)
+        assertThat(history.json.at("/revisions/0/summary").asText()).isEqualTo("Second edit")
+        assertThat(http.get("$native/$pageId/revisions", operatorToken).json["revisions"].map { it["id"].asText() })
+            .containsExactly(third, second, first)
+        assertThat(http.get("$native/$pageId", operatorToken).json["currentRevisionId"].asText()).isEqualTo(third)
+        assertThat(rowCounts()).isEqualTo(beforeReads)
+        val absent = http.get("/api/v1/revisions/${UUID.randomUUID()}", operatorToken)
+        assertThat(absent.status).isEqualTo(404)
+        assertThat(absent.json["code"].asText()).isEqualTo("REVISION_NOT_FOUND")
+        assertSchema("/paths/~1revisions~1{revisionId}/get/responses/404", absent.json)
+        val other = http.nativeCreate("Other ${UUID.randomUUID()}", "Other").json["currentRevisionId"].asText()
+        val beforeInvalidReads = rowCounts()
+        for (cursor in listOf("not-a-uuid", other)) {
+            val invalid = http.get("$native/$pageId/revisions?cursor=$cursor", operatorToken)
+            assertThat(invalid.status).isEqualTo(400)
+            assertThat(invalid.json["code"].asText()).isEqualTo("INVALID_CURSOR")
+            assertSchema("/paths/~1pages~1{pageId}~1revisions/get/responses/400", invalid.json)
+        }
+        assertThat(rowCounts()).isEqualTo(beforeInvalidReads)
+    }
+
+    @Test
+    fun `history and old source apply private read policy on every surface without leaking existence`() {
+        val title = "Private history ${UUID.randomUUID()}"
+        val created = http.nativeCreate(title, source).json
+        val pageId = created["id"].asText()
+        val first = created["currentRevisionId"].asText()
+        val compatId = http.actionRead("titles" to title, operatorToken).json.at("/query/pages/0/revisions/0/revid").asLong()
+        val edited = http.postJson("$native/$pageId/revisions",
+            mapOf("baseRevisionId" to first, "source" to "Second", "summary" to "Private summary"), operatorToken)
+        assertThat(edited.status).isEqualTo(201)
+        val beforeReads = rowCounts()
+        val missing = UUID.randomUUID()
+        val nativeReads = listOf(
+            http.get("$native/$pageId/revisions"), http.get("$native/$missing/revisions"),
+            http.get("/api/v1/revisions/$first"), http.get("/api/v1/revisions/$missing"),
+        )
+        for (response in nativeReads) {
+            assertThat(response.status).isEqualTo(403)
+            assertThat(response.header("Cache-Control")).isEqualTo("no-store")
+            assertThat(response.json.fieldNames().asSequence().toSet()).containsExactlyInAnyOrder("code", "message", "requestId")
+            assertThat(response.json["code"].asText()).isEqualTo("FORBIDDEN")
+        }
+        val actionReads = listOf(
+            http.actionQuery("prop" to "revisions", "titles" to title, "rvlimit" to "2"),
+            http.actionQuery("prop" to "revisions", "titles" to "Missing $missing", "rvlimit" to "2"),
+            http.actionRead("revids" to compatId.toString()), http.actionRead("revids" to "999999999"),
+        )
+        for (response in actionReads) {
+            assertThat(response.status).isEqualTo(200)
+            assertThat(response.header("Cache-Control")).isEqualTo("no-store")
+            assertThat(response.json.fieldNames().asSequence().toList()).containsExactly("error")
+            assertThat(response.json.at("/error/code").asText()).isEqualTo("readapidenied")
+        }
+        val restReads = listOf(
+            http.restHistory(title.replace(' ', '_')), http.restHistory("Missing_$missing"),
+            http.restRevision(compatId), http.restRevision(999999999),
+        )
+        for (response in restReads) {
+            assertThat(response.status).isEqualTo(403)
+            assertThat(response.header("Cache-Control")).isEqualTo("no-store")
+            assertThat(response.json["errorKey"].asText()).isEqualTo("rest-permission-denied")
+            assertThat(response.json).isEqualTo(restReads.first().json)
+        }
+        val allowedAction = http.actionRead("revids" to compatId.toString(), operatorToken)
+        val allowedRest = http.restRevision(compatId, operatorToken)
+        assertThat(allowedAction.json.at("/query/pages/0/revisions/0/slots/main/content").asText()).isEqualTo(source)
+        assertThat(allowedRest.json["source"].asText()).isEqualTo(source)
+        assertThat(rowCounts()).isEqualTo(beforeReads)
+    }
+
+    @Test
+    fun `native history applies its default and maximum page sizes`() {
+        val title = "History_size_${UUID.randomUUID()}"
+        val created = http.nativeCreate(title, source).json
+        val path = "$native/${created["id"].asText()}/revisions"
+        var revisionId = created["currentRevisionId"].asText()
+        val ids = mutableListOf(revisionId)
+        repeat(20) { index ->
+            val edit = http.postJson(path,
+                mapOf("baseRevisionId" to revisionId, "source" to "Revision $index"), operatorToken)
+            assertThat(edit.status).isEqualTo(201)
+            revisionId = edit.json["currentRevisionId"].asText()
+            ids.add(revisionId)
+        }
+        val defaultPage = http.get(path, operatorToken)
+        assertThat(defaultPage.status).isEqualTo(200)
+        assertThat(defaultPage.json["revisions"].map { it["id"].asText() })
+            .containsExactlyElementsOf(ids.asReversed().take(20))
+        assertThat(defaultPage.json["nextCursor"].asText()).isEqualTo(ids[1])
+        val maxPage = http.get("$path?limit=50", operatorToken)
+        assertThat(maxPage.status).isEqualTo(200)
+        assertThat(maxPage.json["revisions"].map { it["id"].asText() })
+            .containsExactlyElementsOf(ids.asReversed())
+        assertThat(maxPage.json["nextCursor"].isNull).isTrue()
+        assertThat(http.get("$path?limit=51", operatorToken).status).isEqualTo(400)
+        assertThat(http.get("$path?limit=0", operatorToken).status).isEqualTo(400)
+
+        val action = http.actionQuery("prop" to "revisions", "titles" to title, "rvprop" to "ids",
+            "rvlimit" to "21", auth = operatorToken)
+        val numericIds = action.json.at("/query/pages/0/revisions").map { it["revid"].asLong() }
+        assertThat(numericIds).hasSize(21)
+        val rest = http.restHistory(title, operatorToken)
+        assertThat(rest.json["revisions"].map { it["id"].asLong() }).containsExactlyElementsOf(numericIds.take(20))
+        assertThat(rest.json["older"].asText()).endsWith("?older_than=${numericIds[19]}")
+        val older = http.restHistory(title, operatorToken, "?older_than=${numericIds[19]}")
+        assertThat(older.json["revisions"].map { it["id"].asLong() }).containsExactly(numericIds.last())
+        assertThat(older.json["newer"].asText()).endsWith("?newer_than=${numericIds.last()}")
+        val newer = http.restHistory(title, operatorToken, "?newer_than=${numericIds.last()}")
+        assertThat(newer.json["revisions"].map { it["id"].asLong() }).containsExactlyElementsOf(numericIds.take(20))
+    }
+
+    @Test
     fun `native commit appends a revision and rejects a stale base`() {
         val created = http.nativeCreate("Edit ${UUID.randomUUID()}", source).json
         val pageId = created["id"].asText()

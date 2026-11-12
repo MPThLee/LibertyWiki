@@ -68,38 +68,63 @@ paths:
     get:
       tags:
       - Revisions
+      summary: 문서 리비전 이력 조회
       operationId: getRevisions
+      description: >-
+        내부 시험용 일반 이름공간 문서의 이력을 시각 역순으로 반환한다. 동일 시각은 숫자 리비전 ID의 역순으로 정렬한다.
+        응답에는 Cache-Control no-store를 적용한다.
+      security:
+      - bearerAuth: []
+      - {}
       parameters:
       - $ref: '#/components/parameters/PageId'
       - name: cursor
         in: query
         required: false
+        description: 직전 응답의 nextCursor. 해당 리비전을 제외하고 더 오래된 항목을 반환한다.
         schema:
           type: string
+          format: uuid
       - name: limit
         in: query
         required: false
         schema:
           type: integer
           minimum: 1
-          maximum: 200
-          default: 50
+          maximum: 50
+          default: 20
       responses:
         '200':
-          description: Revision list
+          description: Revision history
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  items:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/Revision'
-                  nextCursor:
-                    type:
-                    - string
-                    - 'null'
+                $ref: '#/components/schemas/RevisionHistory'
+        '400':
+          description: INVALID_CURSOR or INVALID_LIMIT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: PAGE_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: INVALID_PAGE_ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     post:
       tags:
       - Revisions
@@ -306,27 +331,47 @@ paths:
     get:
       tags:
       - Revisions
-      summary: CAP-REVISION-READ
+      summary: 리비전 원문 조회
       operationId: getRevision
+      description: >-
+        내부 시험용 일반 이름공간 문서의 특정 리비전에 저장된 Wikitext를 반환한다.
+        응답에는 Cache-Control no-store를 적용한다.
+      security:
+      - bearerAuth: []
+      - {}
       parameters:
       - name: revisionId
         in: path
         required: true
         schema:
           type: string
+          format: uuid
       responses:
         '200':
-          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
-        '401': &id001
-          description: Unauthorized
-        '403': &id002
-          description: Forbidden
-        '404': &id003
-          description: Not Found
-        '409': &id004
-          description: Conflict
-        '422': &id005
-          description: Unprocessable Entity
+          description: Stored revision source
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevisionSource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: REVISION_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: INVALID_REVISION_ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /pages/{pageId}/moves:
     post:
       tags:
@@ -349,11 +394,16 @@ paths:
       responses:
         '200':
           description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
-        '401': *id001
-        '403': *id002
-        '404': *id003
-        '409': *id004
-        '422': *id005
+        '401': &id001
+          description: Unauthorized
+        '403': &id002
+          description: Forbidden
+        '404': &id003
+          description: Not Found
+        '409': &id004
+          description: Conflict
+        '422': &id005
+          description: Unprocessable Entity
   /pages/{pageId}:
     get:
       tags:
@@ -1074,6 +1124,12 @@ paths:
         '422': *id005
 
 components:
+  headers:
+    NoStore:
+      required: true
+      schema:
+        type: string
+        const: no-store
   parameters:
     PageId:
       name: pageId
@@ -1129,18 +1185,11 @@ components:
           createdAt:
             type: string
             format: date-time
-    Revision:
+    RevisionHistoryEntry:
       type: object
-      required:
-      - id
-      - pageId
-      - sourceSha256
-      - createdAt
+      required: [id, parentRevisionId, createdAt, summary]
       properties:
         id:
-          type: string
-          format: uuid
-        pageId:
           type: string
           format: uuid
         parentRevisionId:
@@ -1148,13 +1197,39 @@ components:
           - string
           - 'null'
           format: uuid
-        sourceSha256:
-          type: string
         createdAt:
           type: string
           format: date-time
         summary:
           type: string
+    RevisionHistory:
+      type: object
+      required: [revisions, nextCursor]
+      properties:
+        revisions:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/RevisionHistoryEntry'
+        nextCursor:
+          type: [string, 'null']
+          format: uuid
+          description: 다음 페이지가 있으면 이 응답의 마지막 리비전 UUID. 마지막 페이지이면 null.
+    RevisionSource:
+      allOf:
+      - $ref: '#/components/schemas/RevisionHistoryEntry'
+      - type: object
+        required: [pageId, normalizedTitle, source, contentModel]
+        properties:
+          pageId:
+            type: string
+            format: uuid
+          normalizedTitle:
+            type: string
+          source:
+            type: string
+          contentModel:
+            const: wikitext
     CreatePageRequest:
       type: object
       additionalProperties: false

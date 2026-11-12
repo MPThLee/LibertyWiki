@@ -70,6 +70,8 @@ status: INCOMPLETE
 
 원문 편집의 현재 구현 범위, 기준 revision 및 호환성 차이는 [내부 시험용 원문 편집 계약](15_PAGE_SOURCE_SLICE.md#기존-문서-편집)에 명시합니다.
 
+`CAP-REVISION-HISTORY`와 `CAP-REVISION-READ`의 매핑, 공통 읽기 정책과 차등 검증 기준은 [리비전 이력과 이전 원문 계약](15_PAGE_SOURCE_SLICE.md#리비전-이력과-이전-원문)에 명시합니다.
+
 각 operation의 metadata: `capabilityId`, `upstreamVersionIntroduced`, `upstreamVersionChanged`, `mwCompatAction`, `mwCompatRest`, `nativeOperationIds`, `permissionPolicyId`, `sideEffectIds`, `testIds`, `extensionId`, `status`, `owner`, `fixtureVersion`, `releaseId`.
 
 ### API 진화 관리

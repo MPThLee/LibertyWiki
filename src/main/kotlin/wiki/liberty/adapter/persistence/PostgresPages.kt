@@ -4,6 +4,8 @@ package wiki.liberty.adapter.persistence
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Repository
 import wiki.liberty.application.FirstRevision
+import wiki.liberty.application.HistoryDirection
+import wiki.liberty.application.HistoryWindow
 import wiki.liberty.application.PageInsert
 import wiki.liberty.application.PageRepository
 import wiki.liberty.application.RevisionAppend
@@ -11,6 +13,11 @@ import wiki.liberty.application.RevisionWrite
 import wiki.liberty.domain.Page
 import wiki.liberty.domain.PageLookup
 import wiki.liberty.domain.PageTitle
+import wiki.liberty.domain.RevisionLookup
+import wiki.liberty.domain.RevisionMetadata
+import wiki.liberty.domain.RevisionPage
+import wiki.liberty.domain.RevisionSource
+import java.sql.ResultSet
 import java.time.ZoneOffset
 import java.util.UUID
 
@@ -19,6 +26,81 @@ class PostgresPages(private val jdbc: JdbcTemplate) : PageRepository {
     override fun findByTitle(title: PageTitle) = find("p.namespace_id = 0 AND p.normalized_title = ?", title.value)
     override fun findById(id: PageLookup.Id) = find("p.id = ?", id.value)
     override fun findByCompatId(id: PageLookup.CompatId) = find("p.compat_id = ?", id.value)
+
+    override fun findRevisionPage(lookup: PageLookup): RevisionPage? {
+        val (condition, key) = when (lookup) {
+            is PageLookup.Title -> "p.namespace_id = 0 AND p.normalized_title = ?" to lookup.input
+            is PageLookup.Id -> "p.id = ?" to lookup.value
+            is PageLookup.CompatId -> "p.compat_id = ?" to lookup.value
+        }
+        return jdbc.query(
+            "SELECT p.id, p.compat_id, p.normalized_title, p.current_revision_id FROM wiki_page p WHERE $condition",
+            { row, _ -> revisionPage(row) },
+            key,
+        ).singleOrNull()
+    }
+
+    override fun findRevision(lookup: RevisionLookup): RevisionSource? {
+        val (column, key) = revisionKey(lookup)
+        return jdbc.query(
+            """
+            SELECT $revisionColumns, p.id, p.compat_id, p.normalized_title, p.current_revision_id, r.source
+            FROM wiki_revision r JOIN wiki_page p ON p.id = r.page_id
+            $parentJoin
+            WHERE r.$column = ?
+            """.trimIndent(),
+            { row, _ -> RevisionSource(revisionPage(row), metadata(row), row.getString("source")) },
+            key,
+        ).singleOrNull()
+    }
+
+    override fun findHistoryAnchor(page: RevisionPage, lookup: RevisionLookup): RevisionMetadata? {
+        val (column, key) = revisionKey(lookup)
+        return jdbc.query(
+            "SELECT $revisionColumns FROM wiki_revision r $parentJoin WHERE $historyScope AND r.$column = ?",
+            { row, _ -> metadata(row) },
+            page.id, page.currentRevisionId, key,
+        ).singleOrNull()
+    }
+
+    override fun findHistory(page: RevisionPage, window: HistoryWindow, count: Int): List<RevisionMetadata> {
+        val older = window.direction == HistoryDirection.OLDER
+        val order = if (older) "DESC" else "ASC"
+        val operator = (if (older) "<" else ">") + if (window.inclusive) "=" else ""
+        val bound = if (window.anchor == null) "" else "AND (r.created_at, r.compat_id) $operator (?, ?)"
+        val arguments = listOfNotNull<Any>(
+            page.id, page.currentRevisionId, window.anchor?.createdAt?.atOffset(ZoneOffset.UTC), window.anchor?.compatId, count,
+        )
+        return jdbc.query(
+            """
+            SELECT $revisionColumns FROM wiki_revision r
+            $parentJoin
+            WHERE $historyScope $bound
+            ORDER BY r.created_at $order, r.compat_id $order LIMIT ?
+            """.trimIndent(),
+            { row, _ -> metadata(row) },
+            *arguments.toTypedArray(),
+        )
+    }
+
+    private fun revisionKey(lookup: RevisionLookup) = when (lookup) {
+        is RevisionLookup.Id -> "id" to lookup.value
+        is RevisionLookup.CompatId -> "compat_id" to lookup.value
+    }
+
+    private fun revisionPage(row: ResultSet) = RevisionPage(
+        row.getObject("id", UUID::class.java), row.getLong("compat_id"),
+        checkNotNull(PageTitle.parse(row.getString("normalized_title"))),
+        row.getObject("current_revision_id", UUID::class.java),
+    )
+
+    private fun metadata(row: ResultSet) = RevisionMetadata(
+        row.getObject("revision_id", UUID::class.java), row.getLong("compat_revision_id"),
+        row.getObject("parent_revision_id", UUID::class.java),
+        row.getObject("compat_parent_id", Long::class.javaObjectType),
+        row.getTimestamp("created_at").toInstant(), row.getString("summary"), row.getString("actor"),
+        row.getInt("source_size"), row.getObject("delta", Int::class.javaObjectType),
+    )
 
     private fun find(condition: String, key: Any): Page? = jdbc.query(
         """
@@ -106,5 +188,17 @@ class PostgresPages(private val jdbc: JdbcTemplate) : PageRepository {
             eventType, pageId, revisionId, actor, revision.requestId, createdAt,
         )
         return compatRevisionId
+    }
+
+    private companion object {
+        // Revisions of one page are serialized, so its captured head bounds the read across statements.
+        const val historyScope = "r.page_id = ? AND r.compat_id <= (SELECT compat_id FROM wiki_revision WHERE id = ?)"
+        const val parentJoin = "LEFT JOIN wiki_revision parent ON parent.page_id = r.page_id AND parent.id = r.parent_revision_id"
+        const val revisionColumns = """
+            r.id AS revision_id, r.compat_id AS compat_revision_id, r.parent_revision_id,
+            parent.compat_id AS compat_parent_id, r.created_at, r.summary, r.actor,
+            octet_length(r.source) AS source_size,
+            octet_length(r.source) - octet_length(parent.source) AS delta
+        """
     }
 }

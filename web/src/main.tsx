@@ -11,6 +11,16 @@ type SourcePage = {
   source: string
 }
 
+type RevisionSummary = {
+  id: string
+  parentRevisionId: string | null
+  createdAt: string
+  summary: string
+}
+type RevisionHistory = { revisions: RevisionSummary[]; nextCursor: string | null }
+type Revision = RevisionSummary & { pageId: string; normalizedTitle: string; source: string; contentModel: string }
+type PendingDraft = { pageId: string; baseRevisionId: string; source: string; summary: string }
+
 const errorMessages: Record<string, string> = {
   EDIT_CONFLICT: '다른 편집이 먼저 저장되었습니다. 작성한 원문을 보존했습니다.',
   FORBIDDEN: '이 작업을 수행할 권한이 없습니다.',
@@ -28,7 +38,7 @@ class RequestError extends Error {
   }
 }
 
-async function requestPage(path: string, token: string, body?: object): Promise<SourcePage> {
+async function request<T>(path: string, token: string, body?: object): Promise<T> {
   const headers = new Headers({ Accept: 'application/json' })
   if (token) headers.set('Authorization', `Bearer ${token}`)
   if (body) headers.set('Content-Type', 'application/json')
@@ -45,6 +55,8 @@ async function requestPage(path: string, token: string, body?: object): Promise<
   return response.json()
 }
 
+const requestPage = (path: string, token: string, body?: object) => request<SourcePage>(path, token, body)
+
 function App() {
   const [token, setToken] = useState('')
   const [page, setPage] = useState<SourcePage>()
@@ -55,6 +67,31 @@ function App() {
   const [summary, setSummary] = useState('')
   const [conflict, setConflict] = useState(false)
   const [latest, setLatest] = useState<SourcePage>()
+  const [history, setHistory] = useState<RevisionSummary[]>()
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [revision, setRevision] = useState<Revision>()
+  const [pendingDraft, setPendingDraft] = useState<PendingDraft>()
+
+  function clearHistory() {
+    setHistory(undefined)
+    setNextCursor(null)
+    setRevision(undefined)
+  }
+
+  function changeToken(value: string) {
+    if (page && (draft !== page.source || summary || conflict)) {
+      setPendingDraft({ pageId: page.id, baseRevisionId: page.currentRevisionId, source: draft, summary })
+    }
+    setToken(value)
+    setPage(undefined)
+    setDraft('')
+    setSummary('')
+    setLatest(undefined)
+    setConflict(false)
+    clearHistory()
+    setError('')
+    setStatus('')
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>, create: boolean) {
     event.preventDefault()
@@ -64,6 +101,7 @@ function App() {
     setError('')
     setStatus('요청 처리 중')
     setPage(undefined)
+    clearHistory()
     setConflict(false)
     setLatest(undefined)
     setBusy(true)
@@ -77,9 +115,17 @@ function App() {
           summary: String(fields.get('summary')),
         })
         : await requestPage(`/api/v1/pages/by-title/${encodeURIComponent(title)}`, token)
+      const restored = pendingDraft?.pageId === result.id ? pendingDraft : undefined
+      const changed = restored !== undefined && restored.baseRevisionId !== result.currentRevisionId
+      setPendingDraft(undefined)
       setPage(result)
-      setDraft(result.source)
-      setSummary('')
+      setDraft(restored?.source ?? result.source)
+      setSummary(restored?.summary ?? '')
+      if (changed) {
+        setConflict(true)
+        setLatest(result)
+        setError(errorMessages.EDIT_CONFLICT)
+      }
       setStatus(create ? '문서를 만들었습니다.' : '현재 원문을 불러왔습니다.')
     } catch (failure) {
       if (failure instanceof DOMException && failure.name === 'TimeoutError') {
@@ -106,6 +152,7 @@ function App() {
         summary,
       })
       setPage(result)
+      clearHistory()
       setDraft(result.source)
       setSummary('')
       setStatus('편집을 저장했습니다.')
@@ -135,6 +182,39 @@ function App() {
     }
   }
 
+  async function fetchHistory(cursor?: string) {
+    if (!page || busy) return
+    setBusy(true)
+    setError('')
+    try {
+      const params = new URLSearchParams({ limit: '20' })
+      if (cursor) params.set('cursor', cursor)
+      const result = await request<RevisionHistory>(`/api/v1/pages/${encodeURIComponent(page.id)}/revisions?${params}`, token)
+      setHistory(previous => cursor ? [...(previous ?? []), ...result.revisions] : result.revisions)
+      setNextCursor(result.nextCursor)
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : '요청을 처리할 수 없습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function fetchRevision(id: string) {
+    if (!page || busy) return
+    setBusy(true)
+    setError('')
+    setRevision(undefined)
+    try {
+      const result = await request<Revision>(`/api/v1/revisions/${encodeURIComponent(id)}`, token)
+      if (result.pageId !== page.id) throw new Error('이 문서의 리비전을 불러오지 못했습니다.')
+      setRevision(result)
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : '요청을 처리할 수 없습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <>
       <header>
@@ -144,7 +224,7 @@ function App() {
         <h1>문서 원문</h1>
         <label className="credential">
           운영자 토큰 (권한이 필요한 경우)
-          <input disabled={busy} type="password" autoComplete="off" value={token} onChange={event => setToken(event.target.value)} />
+          <input disabled={busy} type="password" autoComplete="off" value={token} onChange={event => changeToken(event.target.value)} />
         </label>
         <div className="forms">
           <form onSubmit={event => void submit(event, false)}>
@@ -166,6 +246,31 @@ function App() {
           <section aria-labelledby="result-title">
             <h2 id="result-title">{page.normalizedTitle}</h2>
             <pre aria-label="현재 Wikitext 원문">{page.source}</pre>
+            <div>
+              <h3>문서 이력</h3>
+              <button type="button" disabled={busy} onClick={() => void fetchHistory()}>문서 이력 보기</button>
+              {history && (
+                <>
+                  <ul>
+                    {history.map(item => (
+                      <li key={item.id}>
+                        <time dateTime={item.createdAt}>{item.createdAt}</time>{' · '}
+                        <span>{item.summary}</span>{' '}
+                        <button type="button" disabled={busy} onClick={() => void fetchRevision(item.id)}>리비전 {item.id} 보기</button>
+                      </li>
+                    ))}
+                  </ul>
+                  {nextCursor && <button type="button" disabled={busy} onClick={() => void fetchHistory(nextCursor)}>이력 더 보기</button>}
+                </>
+              )}
+              {revision && (
+                <div>
+                  <h3>이전 리비전 {revision.id}</h3>
+                  <p><time dateTime={revision.createdAt}>{revision.createdAt}</time> · {revision.summary}</p>
+                  <pre aria-label="이전 Wikitext 원문">{revision.source}</pre>
+                </div>
+              )}
+            </div>
             <form onSubmit={event => void save(event)}>
               <h3>원문 편집</h3>
               <label>편집할 Wikitext 원문<textarea value={draft} onChange={event => setDraft(event.target.value)} disabled={busy} rows={8} spellCheck={false} /></label>
@@ -176,12 +281,12 @@ function App() {
               <div>
                 <p>최신 원문을 확인하고 작성한 원문을 직접 조정한 후 저장 기준으로 선택하세요.</p>
                 <button type="button" disabled={busy} onClick={() => void fetchLatest()}>최신 원문 확인</button>
-                <button type="button" disabled={busy} onClick={() => { setPage(undefined); setLatest(undefined); setConflict(false); setError(''); setStatus('편집을 취소했습니다.') }}>초안 버리고 편집 취소</button>
+                <button type="button" disabled={busy} onClick={() => { setPage(undefined); clearHistory(); setLatest(undefined); setConflict(false); setError(''); setStatus('편집을 취소했습니다.') }}>초안 버리고 편집 취소</button>
                 {latest && (
                   <div>
                     <h3>최신 원문</h3>
                     <pre aria-label="최신 Wikitext 원문">{latest.source}</pre>
-                    <button type="button" disabled={busy} onClick={() => { setPage(latest); setLatest(undefined); setConflict(false); setError(''); setStatus('최신 리비전을 저장 기준으로 선택했습니다. 작성한 원문을 검토한 후 저장하세요.') }}>최신 리비전을 저장 기준으로 선택</button>
+                    <button type="button" disabled={busy} onClick={() => { setPage(latest); clearHistory(); setLatest(undefined); setConflict(false); setError(''); setStatus('최신 리비전을 저장 기준으로 선택했습니다. 작성한 원문을 검토한 후 저장하세요.') }}>최신 리비전을 저장 기준으로 선택</button>
                   </div>
                 )}
               </div>

@@ -13,6 +13,7 @@ import wiki.liberty.adapter.api.PageHttp
 import wiki.liberty.adapter.api.requestId
 import wiki.liberty.application.CreatePage
 import wiki.liberty.application.EditPage
+import wiki.liberty.application.HistoryRequest
 import wiki.liberty.application.PageActor
 import wiki.liberty.application.PageApplicationService
 import wiki.liberty.application.RevisionBase
@@ -20,6 +21,8 @@ import wiki.liberty.domain.Page
 import wiki.liberty.domain.PageError
 import wiki.liberty.domain.PageFailure
 import wiki.liberty.domain.PageLookup
+import wiki.liberty.domain.RevisionLookup
+import wiki.liberty.domain.RevisionMetadata
 import java.net.URI
 import java.time.Instant
 import java.util.UUID
@@ -39,13 +42,26 @@ data class NativeSourcePage(
 )
 
 data class NativeError(val code: String, val message: String, val requestId: UUID)
+data class NativeRevisionEntry(val id: UUID, val parentRevisionId: UUID?, val createdAt: Instant, val summary: String)
+data class NativeHistory(val revisions: List<NativeRevisionEntry>, val nextCursor: UUID?)
+data class NativeRevisionSource(
+    val id: UUID,
+    val parentRevisionId: UUID?,
+    val createdAt: Instant,
+    val summary: String,
+    val pageId: UUID,
+    val normalizedTitle: String,
+    val source: String,
+    val contentModel: String,
+)
 class NativePageMissing : RuntimeException()
-class InvalidNativeId(val revision: Boolean) : RuntimeException()
+enum class NativeIdKind { PAGE, BASE_REVISION, REVISION }
+class InvalidNativeId(val kind: NativeIdKind) : RuntimeException()
 
 @RestController
-@RequestMapping("/api/v1/pages", produces = [MediaType.APPLICATION_JSON_VALUE])
+@RequestMapping("/api/v1", produces = [MediaType.APPLICATION_JSON_VALUE])
 class NativePages(private val pages: PageApplicationService, private val http: PageHttp) {
-    @PostMapping
+    @PostMapping("/pages")
     fun create(@RequestBody body: NativeCreatePage, request: HttpServletRequest): ResponseEntity<NativeSourcePage> {
         requireJson(request)
         val page = pages.create(
@@ -54,7 +70,7 @@ class NativePages(private val pages: PageApplicationService, private val http: P
         return ResponseEntity.created(URI.create("/api/v1/pages/${page.id}")).body(page.native())
     }
 
-    @PostMapping("/{pageId}/revisions")
+    @PostMapping("/pages/{pageId}/revisions")
     @ResponseStatus(HttpStatus.CREATED)
     fun edit(
         @PathVariable pageId: String, @RequestBody body: NativeEditPage, request: HttpServletRequest,
@@ -63,13 +79,50 @@ class NativePages(private val pages: PageApplicationService, private val http: P
         val actor = http.actor(request)
         pages.requireRead(actor)
         val command = EditPage(
-            PageLookup.Id(parseId(pageId)), RevisionBase.Native(parseId(body.baseRevisionId, revision = true)),
+            PageLookup.Id(parseId(pageId)), RevisionBase.Native(parseId(body.baseRevisionId, NativeIdKind.BASE_REVISION)),
             body.source, body.summary,
         )
         return pages.edit(actor, request.requestId(), command).native()
     }
 
-    @GetMapping("/by-title/{title}")
+    @GetMapping("/pages/{pageId}/revisions")
+    fun history(
+        @PathVariable pageId: String,
+        @RequestParam(required = false) limit: String?,
+        @RequestParam(required = false) cursor: String?,
+        request: HttpServletRequest,
+    ): NativeHistory {
+        val actor = http.actor(request)
+        pages.requireRead(actor)
+        val page = PageLookup.Id(parseId(pageId))
+        val count = limit?.let { it.toIntOrNull() ?: throw PageFailure(PageError.INVALID_LIMIT) } ?: 20
+        val anchor = cursor?.let {
+            try {
+                RevisionLookup.Id(parseId(it, NativeIdKind.REVISION))
+            } catch (_: InvalidNativeId) {
+                throw PageFailure(PageError.INVALID_CURSOR)
+            }
+        }
+        val history = pages.history(actor, HistoryRequest(page, count, anchor))
+        return NativeHistory(
+            history.revisions.map { it.native() },
+            history.revisions.lastOrNull()?.id?.takeIf { history.hasOlder },
+        )
+    }
+
+    @GetMapping("/revisions/{revisionId}")
+    fun revision(@PathVariable revisionId: String, request: HttpServletRequest): NativeRevisionSource {
+        val actor = http.actor(request)
+        pages.requireRead(actor)
+        val source = pages.readRevision(actor, RevisionLookup.Id(parseId(revisionId, NativeIdKind.REVISION)))
+        val revision = source.revision
+        return NativeRevisionSource(
+            revision.id, revision.parentId, revision.createdAt, revision.summary,
+            source.page.id, source.page.title.value, source.source, "wikitext",
+        )
+    }
+
+    @GetMapping("/pages/by-title/{title}")
     fun byTitle(@PathVariable title: String, request: HttpServletRequest): NativeSourcePage {
         val actor = http.actor(request)
         pages.requireRead(actor)
@@ -77,20 +130,20 @@ class NativePages(private val pages: PageApplicationService, private val http: P
         return read(PageLookup.Title(title), actor)
     }
 
-    @GetMapping("/{pageId}")
+    @GetMapping("/pages/{pageId}")
     fun byId(@PathVariable pageId: String, request: HttpServletRequest): NativeSourcePage {
         val actor = http.actor(request)
         pages.requireRead(actor)
         return read(PageLookup.Id(parseId(pageId)), actor)
     }
 
-    private fun parseId(value: String, revision: Boolean = false): UUID =
+    private fun parseId(value: String, kind: NativeIdKind = NativeIdKind.PAGE): UUID =
         try {
             UUID.fromString(value).also {
-                if (!it.toString().equals(value, ignoreCase = true)) throw InvalidNativeId(revision)
+                if (!it.toString().equals(value, ignoreCase = true)) throw InvalidNativeId(kind)
             }
         } catch (_: IllegalArgumentException) {
-            throw InvalidNativeId(revision)
+            throw InvalidNativeId(kind)
         }
 
     private fun requireJson(request: HttpServletRequest) {
@@ -103,6 +156,7 @@ class NativePages(private val pages: PageApplicationService, private val http: P
         pages.read(actor, lookup).page?.native() ?: throw NativePageMissing()
 
     private fun Page.native() = NativeSourcePage(id, 0, title.value, revisionId, "ACTIVE", source, "wikitext", createdAt)
+    private fun RevisionMetadata.native() = NativeRevisionEntry(id, parentId, createdAt, summary)
 }
 
 @RestControllerAdvice(assignableTypes = [NativePages::class])
@@ -112,7 +166,8 @@ class NativePageErrors {
         val status = when (failure.error) {
             PageError.FORBIDDEN -> HttpStatus.FORBIDDEN
             PageError.EXISTS, PageError.EDIT_CONFLICT -> HttpStatus.CONFLICT
-            PageError.PAGE_NOT_FOUND -> HttpStatus.NOT_FOUND
+            PageError.PAGE_NOT_FOUND, PageError.REVISION_NOT_FOUND -> HttpStatus.NOT_FOUND
+            PageError.INVALID_CURSOR, PageError.INVALID_LIMIT -> HttpStatus.BAD_REQUEST
             else -> HttpStatus.UNPROCESSABLE_ENTITY
         }
         val message = when (failure.error) {
@@ -120,6 +175,9 @@ class NativePageErrors {
             PageError.EXISTS -> "A page with this title already exists."
             PageError.EDIT_CONFLICT -> "The page has changed since the base revision."
             PageError.PAGE_NOT_FOUND -> "Page not found."
+            PageError.REVISION_NOT_FOUND -> "Revision not found."
+            PageError.INVALID_CURSOR -> "Expected a revision UUID belonging to this page."
+            PageError.INVALID_LIMIT -> "Limit must be an integer between 1 and 50."
             PageError.INVALID_TITLE -> "The title is invalid or outside the supported namespace."
             PageError.INVALID_NAMESPACE -> "Only the main namespace is supported."
             PageError.INVALID_SOURCE -> "Source must be valid Unicode and at most 1 MiB in UTF-8."
@@ -132,10 +190,13 @@ class NativePageErrors {
     fun missing(request: HttpServletRequest) = error(HttpStatus.NOT_FOUND, "PAGE_NOT_FOUND", "Page not found.", request)
 
     @ExceptionHandler(InvalidNativeId::class)
-    fun invalidId(failure: InvalidNativeId, request: HttpServletRequest) = if (failure.revision) {
-        error(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_BASE_REVISION_ID", "Expected a base revision UUID.", request)
-    } else {
-        error(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_PAGE_ID", "Expected a page UUID.", request)
+    fun invalidId(failure: InvalidNativeId, request: HttpServletRequest) = when (failure.kind) {
+        NativeIdKind.BASE_REVISION ->
+            error(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_BASE_REVISION_ID", "Expected a base revision UUID.", request)
+        NativeIdKind.PAGE ->
+            error(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_PAGE_ID", "Expected a page UUID.", request)
+        NativeIdKind.REVISION ->
+            error(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_REVISION_ID", "Expected a revision UUID.", request)
     }
 
     @ExceptionHandler(HttpMessageNotReadableException::class)
