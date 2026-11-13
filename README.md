@@ -61,6 +61,16 @@ export WIKI_TEST_DB_USER="$PGUSER" WIKI_TEST_DB_PASSWORD="$PGPASSWORD"
 
 같은 shell에서 위의 내부 시험 환경 실행 절차에 따라 웹을 빌드하고 별도 운영자 토큰을 정해 `./gradlew bootRun`을 실행합니다. 브라우저 시험용 Chromium은 아래 검증 절차로 설치하거나 설치된 Chrome을 사용합니다. MediaWiki 차등 시험 서버는 별도로 준비하며 Nix shell이 원본 구현을 포함하거나 실행하지 않습니다. 사용을 마치면 같은 shell에서 `pg_ctl stop`으로 임시 DB를 종료합니다.
 
+개발 환경 전체를 검사하려면 Chromium을 설치한 뒤 다음 스크립트를 실행합니다. 임시 PostgreSQL과 별도의 시험 DB를 만들고, 웹·백엔드 빌드, 단위·DB 계약 시험, 실제 실행 JAR에 대한 브라우저 시험을 수행합니다. 종료 시 자체 프로세스를 정리하며 실패한 실행의 로그는 출력된 임시 경로에 남깁니다. 설치된 Chrome을 사용하려면 `WIKI_BROWSER_CHANNEL=chrome`을 지정합니다.
+
+```bash
+npm ci --prefix web
+npm exec --prefix web -- playwright install chromium
+nix develop --command bash scripts/verify-development-environment.sh
+```
+
+Linux에서는 Playwright의 호스트 라이브러리도 필요합니다(`playwright install --with-deps chromium`). [개발 환경 CI](.github/workflows/development-environment.yml)는 같은 스크립트를 Linux·macOS의 ARM64·x86-64 네이티브 러너에서 실행합니다. MediaWiki 차등 시험은 별도 기준 서버의 `WIKI_MW_BASE_URL`을 지정했을 때 추가로 실행합니다. 이 검증 범위는 현재 PostgreSQL 문서 기능이며, 다른 DB 구현이나 전체 MediaWiki 호환성을 인증하지 않습니다.
+
 개발 도구는 애플리케이션 의존성이나 배포 이미지에 추가하지 않습니다. Nixpkgs는 MIT, Node.js는 MIT, PostgreSQL은 PostgreSQL License이며 JDK는 배포물의 GPLv2 및 예외·제3자 고지를 따릅니다. 도구를 재배포할 때는 고정된 실제 배포물의 라이선스와 공급망 검토가 별도로 필요합니다.
 
 ## 검증 실행
