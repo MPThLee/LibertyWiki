@@ -50,7 +50,7 @@
 | MediaWiki REST `PUT /w/rest.php/v1/page/{title}` | 409 `editconflict`의 기본 필드와, 비교할 수 있으면 REST GET 비교와 같은 최상위 `from`, `to`, `diff`를 반환한다. 전체 JSON 한도를 넘으면 기본 409만 반환한다. |
 | MediaWiki Action `POST /w/api.php?action=edit` | HTTP 200과 `MediaWiki-API-Error: editconflict`를 반환한다. 기본 JSON 오류의 `code`, 제목이 포함된 `info`, `docref`를 제공한다. |
 
-공식 REST 문서는 Wikidiff2 1.10 이상에서 409에 게시판 차이가 포함된다고 설명한다. 영어·익명 편집 시험 프로파일의 MediaWiki 1.46.2와 Wikidiff2 1.14.2에서는 같은 줄의 충돌과 누락·숨김 기준판 모두 기본 409만 관찰됐다. 차등 계약은 기본 409와 Action 오류를 비교하고, LibertyWiki REST 409의 추가 필드는 기준 서버의 별도 GET 비교 응답과 대조한다. 이 문서와 실응답의 차이, Wikidiff2의 세부 줄 정렬 및 자동 병합은 `compat_gap`이다. LibertyWiki는 다른 문서의 기준판으로 저장할 수 없으며, 기준 서버에서는 해당 입력이 저장된 경우가 관찰됐다. [REST Update page](https://www.mediawiki.org/wiki/API:REST_API/Reference#Update_page), [REST Compare](https://www.mediawiki.org/wiki/API:REST_API/Reference#Compare_revisions).
+REST PUT 409의 게시판 diff는 Wikidiff2 1.10 이상에서 차이를 제공한다는 공식 REST 문서를 구현 기준으로 삼는다. [이슈 #11](https://github.com/fregmented/LibertyWiki/issues/11)의 수용 기준에는 기준 서버 PUT 409의 diff 직접 대조를 포함하지 않는다. 차등 시험은 기준 서버 PUT의 기본 오류 필드와 Action 오류를 비교한다. LibertyWiki PUT 409의 차이는 별도 리비전 비교 GET의 결과와 대조한다. Wikidiff2의 세부 줄 정렬, 자동 병합, 다른 문서에 속한 기준판의 처리 차이는 `compat_gap`이다. [REST Update page](https://www.mediawiki.org/wiki/API:REST_API/Reference#Update_page), [REST Compare](https://www.mediawiki.org/wiki/API:REST_API/Reference#Compare_revisions).
 
 ## 리비전 이력과 이전 원문
 
@@ -111,7 +111,7 @@
 - 편집 시험은 세 경로 각각에서 정상 저장, 이전 revision 보존, 부모와 현재 포인터, 권한과 유효성 오류, 같은 기준 ID로 경쟁하는 요청 중 한 건만 성공하는지 확인한다. 성공 감사·outbox에는 문서·revision·요청 ID가 일치해야 하며 거부된 요청으로 저장 상태가 바뀌면 안 된다. Native 응답은 OpenAPI와 대조하고, 웹은 충돌 후 편집 원문 보존을 확인한다. MediaWiki 차등 시험은 정상 업데이트와 충돌 등 기준 인스턴스에서 관찰할 수 있는 계약을 비교한다.
 - 이력 시험은 생성과 연속 편집 후 세 공개 경로에서 같은 리비전 순서와 지원하는 부모 관계, 원문 및 요약을 확인한다. 페이지 경계, 마지막 페이지, 새 편집 후 계속 조회, 누락 ID, 잘못되거나 다른 문서에 속하는 페이지네이션 기준, 읽기 거부 및 운영자 조회를 시험한다. 거부 응답에 원문·제목·요약·링크가 없어야 하며, 조회 전후 문서 현재 포인터와 리비전·감사·outbox가 같아야 한다. Native 성공·오류 응답은 OpenAPI와 비교한다. 웹은 더 오래된 이력, 읽기 전용 이전 원문과 편집 입력 보존을 확인한다. 차등 시험은 1.46.2에서 관찰한 Action 계속 토큰·숫자 ID 조회와 REST 이력 링크·단일 리비전 원문·상태를 비교한다.
 - compat_gap: MediaWiki의 쿠키·로그인/OAuth, 세션별 CSRF, 정확한 권한·오류 우선순위 및 모든 REST 오류 본문, HTTP 캐시·조건부 요청, 콘텐츠 필터 및 저장 전 치환, 자동 편집 요약, 로케일·이름공간·전체 제목 문법, 복수 제목·revision 조회 옵션, 전체 Action 전송/출력 변형, REST PUT 생성은 별도 계약과 차등 검증이 필요하다.
-- 편집 compat_gap에는 오래된 기준의 자동 병합, 위에서 설명한 REST 충돌 diff 응답 차이와 번역 메시지, 동일 원문 저장 시 Action `nochange` 및 REST 응답·부작용, 편집 요약 `comment: null`, 기준 ID를 생략한 Action 편집, 부분 편집과 타임스탬프·소규모 편집·주시 목록 옵션이 포함된다. 보호, 차단, 행위 필터, 미리보기와 Native ETag 조건부 저장은 제품 요구사항으로 추적한다.
+- 편집 compat_gap에는 오래된 기준의 자동 병합, REST 오류 번역 메시지, 동일 원문 저장 시 Action `nochange` 및 REST 응답·부작용, 편집 요약 `comment: null`, 기준 ID를 생략한 Action 편집, 부분 편집과 타임스탬프·소규모 편집·주시 목록 옵션이 포함된다. 보호, 차단, 행위 필터, 미리보기와 Native ETag 조건부 저장은 제품 요구사항으로 추적한다.
 - 이력 compat_gap에는 가져온 리비전의 시각·ID 경계 검증, 다중 ID·다중 원문·슬롯·필터와 전체 메타데이터, Action의 오래된 순 정렬·포맷·계속 토큰 변형, REST 필터·캐시·조건부 요청, 전체 제목 정규화·넘겨주기, 이전 ID 이관, 삭제·필드별 숨김·억제 권한과 오류 표현이 포함된다. 시험 환경 작성자는 익명/운영자 두 역할로 표현한다. 렌더링·메타데이터 전용 REST 경로와 이전 URL 호환은 별도 기능으로 추적한다.
 - 첫 구현은 PostgreSQL 17을 사용한다. MariaDB 11.8, SQL Server 2022, Oracle 19c에서 스키마 이행, 동시 편집 직렬화와 충돌 시점 공개판 선택, 이전 revision 보존, 비교 제한, 실패 롤백 및 감사·outbox 원자성을 검증해야 한다. 구현 상태는 `INCOMPLETE`이며 GA 출시 게이트에는 이 검증, 호환성 차이 해소와 Wikitext 렌더링이 포함된다.
 - 이력과 이전 원문의 DB 검증은 위 세 DBMS에서도 기존 문서·리비전의 ID 매핑 보존, 안정적인 정렬과 경계 조회, 동시 편집 중 페이지 탐색, UTC 및 Unicode 원문 보존, 읽기 권한과 상태 동등성, 제한된 범위 조회 계획을 요구한다. [ADR-0201](../../docs/adr/0201-relational-database-portability.md).

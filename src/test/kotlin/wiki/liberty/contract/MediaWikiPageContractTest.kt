@@ -225,8 +225,8 @@ class MediaWikiPageContractTest {
         assertThat(storedComparison.json.at("/to/id").asLong()).isEqualTo(currentId)
         val diffTexts = storedComparison.json["diff"].map { it["text"].asText() }
         assertThat(diffTexts).containsExactly("== Heading ==", "OldNew word end")
-        // The pinned fixture may omit the documented conflict diff. Its compare route supplies the oracle.
-        if (includeConflictDiff || staleRest.json.has("diff")) {
+        // The conflict diff follows the public REST contract. The baseline PUT is checked for its error fields.
+        if (includeConflictDiff) {
             assertThat(staleRest.json.select("from", "to", "diff"))
                 .isEqualTo(storedComparison.json.select("from", "to", "diff"))
         }
