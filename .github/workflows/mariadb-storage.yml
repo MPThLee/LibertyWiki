@@ -24,6 +24,7 @@ jobs:
         env:
           MARIADB_ROOT_PASSWORD: disposable-ci-password
           MARIADB_ROOT_HOST: '%'
+          TZ: Asia/Seoul
         ports:
           - 3306/tcp
         options: >-
@@ -47,6 +48,8 @@ jobs:
           npm exec --prefix web -- playwright install --with-deps chromium
       - name: Verify build and runtime
         env:
+          TZ: Pacific/Honolulu
+          JAVA_TOOL_OPTIONS: -Duser.timezone=Pacific/Honolulu
           WIKI_VERIFY_DB_ENGINE: mariadb
           WIKI_DB_URL: jdbc:mariadb://127.0.0.1:${{ job.services.mariadb.ports[3306] }}/libertywiki
           WIKI_DB_USER: root

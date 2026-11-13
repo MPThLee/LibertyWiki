@@ -6,7 +6,7 @@
 
 같은 `PageRepository` 계약과 공개 HTTP 계약 시험을 PostgreSQL 17·MariaDB 11.8에 적용한다. JDBC URL로 엔진별 Flyway 스키마와 UUID·시각 매핑을 선택한다. 기존 PostgreSQL 마이그레이션의 내용과 체크섬은 유지한다. MariaDB의 제목 고유성은 `utf8mb4_nopad_bin`, 원문은 UTF-8 1 MiB를 보존할 수 있는 `MEDIUMTEXT`를 사용한다. 시각은 UTC로 저장하고 두 API에서 같은 시점을 반환한다.
 
-MariaDB는 지연 외래 키를 지원하지 않으므로 문서 생성 트랜잭션 안에서 현재 포인터를 비운 문서를 만든 후 첫 리비전을 삽입하고 포인터를 설정한다. 기존 문서 편집도 새 리비전 삽입 후 현재 포인터를 갱신한다. 중간 상태를 커밋하지 않으며 실패하면 문서·리비전·감사·outbox를 함께 롤백한다. 쓰기 잠금 뒤 최신 상태를 읽도록 `READ_COMMITTED`를 사용한다. DB별 연결·읽기·문장·잠금 대기 시간 한도를 적용한다.
+MariaDB는 지연 외래 키를 지원하지 않으므로 문서 생성 트랜잭션 안에서 현재 포인터를 비운 문서를 만든 후 첫 리비전을 삽입하고 포인터를 설정한다. 기존 문서 편집도 새 리비전 삽입 후 현재 포인터를 갱신한다. 중간 상태를 커밋하지 않으며 실패하면 문서·리비전·감사·outbox를 함께 롤백한다. 쓰기 잠금 뒤 최신 상태를 읽도록 `READ_COMMITTED`를 사용한다. DB별 연결·읽기·문장·잠금 대기 시간 한도를 적용한다. 명시한 연결 설정은 보존하고 빠진 값만 기본값으로 채운다. MariaDB는 strict SQL 모드와 `READ_COMMITTED`가 아닌 연결을 시작 시 거부하며 문자 집합을 스키마에 명시한다.
 
 Oracle MySQL을 MariaDB와 같은 엔진으로 취급하지 않는다. SQL Server·Oracle Database를 포함한 나머지 엔진의 스키마·저장 어댑터는 후속 구현 범위이며, [ADR-0201](../../docs/adr/0201-relational-database-portability.md)의 제품 출시 요구를 축소하지 않는다.
 

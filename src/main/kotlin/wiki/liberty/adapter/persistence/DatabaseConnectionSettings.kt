@@ -14,19 +14,31 @@ class DatabaseConnectionSettings {
         fun databaseTimeouts(): BeanPostProcessor = object : BeanPostProcessor {
             override fun postProcessBeforeInitialization(bean: Any, beanName: String): Any {
                 if (bean is HikariDataSource) {
+                    val url = checkNotNull(bean.jdbcUrl) { "A PostgreSQL or MariaDB JDBC URL is required." }
+                    val urlOptions = url.substringAfter('?', "").split('&')
+                        .map { it.substringBefore('=').lowercase() }.toSet()
+                    fun defaultProperty(name: String, value: Any) {
+                        if (name.lowercase() !in urlOptions && !bean.dataSourceProperties.containsKey(name)) {
+                            bean.addDataSourceProperty(name, value)
+                        }
+                    }
                     when {
-                        bean.jdbcUrl.startsWith("jdbc:postgresql:") -> {
-                            bean.addDataSourceProperty("connectTimeout", 3)
-                            bean.addDataSourceProperty("socketTimeout", 10)
-                            bean.addDataSourceProperty("options", "-c statement_timeout=5000 -c lock_timeout=4000")
+                        url.startsWith("jdbc:postgresql:") -> {
+                            defaultProperty("connectTimeout", 3)
+                            defaultProperty("socketTimeout", 10)
+                            defaultProperty("options", "-c statement_timeout=5000 -c lock_timeout=4000")
                         }
-                        bean.jdbcUrl.startsWith("jdbc:mariadb:") -> {
-                            bean.addDataSourceProperty("connectTimeout", 3000)
-                            bean.addDataSourceProperty("socketTimeout", 10000)
-                            bean.addDataSourceProperty("connectionTimeZone", "UTC")
-                            bean.addDataSourceProperty("forceConnectionTimeZoneToSession", true)
-                            bean.connectionInitSql = "SET SESSION innodb_lock_wait_timeout=4, max_statement_time=5"
+                        url.startsWith("jdbc:mariadb:") -> {
+                            defaultProperty("connectTimeout", 3000)
+                            defaultProperty("socketTimeout", 10000)
+                            defaultProperty("connectionTimeZone", "UTC")
+                            defaultProperty("forceConnectionTimeZoneToSession", true)
+                            if (bean.connectionInitSql == null) {
+                                bean.connectionInitSql = "SET SESSION innodb_lock_wait_timeout=4, max_statement_time=5, " +
+                                    "sql_mode=CONCAT_WS(',', @@SESSION.sql_mode, 'STRICT_ALL_TABLES')"
+                            }
                         }
+                        else -> error("Unsupported JDBC URL: expected PostgreSQL or MariaDB.")
                     }
                 }
                 return bean

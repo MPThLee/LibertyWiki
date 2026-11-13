@@ -21,6 +21,7 @@ import java.util.UUID
 import java.util.concurrent.Callable
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 @Tag("database")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = [
@@ -204,6 +205,35 @@ class PageDatabaseTest {
                 .isEqualTo("content-$index")
         }
         assertThat(http.nativeCreate("boundary__cafe\u0301__$suffix", "duplicate").status).isEqualTo(409)
+    }
+
+    @Test
+    fun `duplicate creation returns conflict while an existing page is locked for editing`() {
+        val title = "Locked-${UUID.randomUUID()}"
+        val created = http.nativeCreate(title, "original")
+        assertThat(created.status).isEqualTo(201)
+        val executor = Executors.newSingleThreadExecutor()
+        try {
+            jdbc.dataSource!!.connection.use { connection ->
+                connection.autoCommit = false
+                try {
+                    connection.prepareStatement("SELECT id FROM wiki_page WHERE namespace_id = 0 AND normalized_title = ? FOR UPDATE").use { statement ->
+                        statement.setString(1, title)
+                        statement.executeQuery().use { rows -> assertThat(rows.next()).isTrue() }
+                    }
+                    val duplicate = executor.submit<ContractHttp.Result> { http.nativeCreate(title, "duplicate") }
+                    val response = duplicate.get(3, TimeUnit.SECONDS)
+                    assertNativeError(response, 409)
+                    assertThat(response.json["code"].asText()).isEqualTo("EXISTS")
+                } finally {
+                    connection.rollback()
+                }
+            }
+        } finally {
+            executor.shutdownNow()
+            executor.awaitTermination(10, TimeUnit.SECONDS)
+        }
+        assertThat(http.get("$native/${created.json["id"].asText()}", operatorToken).json).isEqualTo(created.json)
     }
 
     @Test

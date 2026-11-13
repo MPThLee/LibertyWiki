@@ -24,7 +24,7 @@ export WIKI_HTTP_OPERATOR_TOKEN='replace-with-a-random-local-token'
 ./gradlew bootRun
 ```
 
-MariaDB를 선택할 때는 DB를 `utf8mb4` 문자 집합으로 생성하고 `WIKI_DB_URL=jdbc:mariadb://127.0.0.1:3306/libertywiki`를 사용합니다. JDBC URL에 따라 드라이버와 Flyway 마이그레이션을 선택합니다. 현재 문서 기능의 지원 엔진은 PostgreSQL 17과 MariaDB 11.8이며, Oracle MySQL·SQL Server·Oracle Database용 어댑터는 포함하지 않습니다. 제품 전체의 네 DB 지원 요구는 [ADR-0201](docs/adr/0201-relational-database-portability.md)에 남아 있습니다.
+MariaDB를 선택할 때는 DB를 `utf8mb4` 문자 집합으로 생성하고 `WIKI_DB_URL=jdbc:mariadb://127.0.0.1:3306/libertywiki`를 사용합니다. JDBC URL에 따라 드라이버와 Flyway 마이그레이션을 선택합니다. MariaDB 연결은 `READ_COMMITTED`와 strict SQL 모드를 요구하며, 운영자가 연결 초기화 SQL을 지정해도 이 조건을 유지해야 합니다. 명시한 JDBC 시간 제한과 초기화 SQL은 보존하고 빠진 설정에 기본값을 적용합니다. MariaDB에서 바이너리 로그를 사용하는 경우 `READ_COMMITTED`의 [행 기반 로깅 요구](https://mariadb.com/docs/server/reference/sql-statements/administrative-sql-statements/set-commands/set-transaction)에 맞게 `binlog_format=ROW`로 구성합니다. 현재 문서 기능의 지원 엔진은 PostgreSQL 17과 MariaDB 11.8이며, Oracle MySQL·SQL Server·Oracle Database용 어댑터는 포함하지 않습니다. 제품 전체의 네 DB 지원 요구는 [ADR-0201](docs/adr/0201-relational-database-portability.md)에 남아 있습니다.
 
 [http://127.0.0.1:8080](http://127.0.0.1:8080)에서 운영자 토큰을 입력해 문서를 생성하거나 제목으로 조회한 뒤 원문을 편집합니다. 문서 화면의 이력에서 이전 리비전의 원문을 열거나, 부모가 있는 편집을 선택해 겹치지 않는 후속 변경을 유지하며 해당 편집을 취소할 수 있습니다. 충돌이 발생하면 작성 중인 원문과 요약을 유지한 상태에서 최신 문서를 확인할 수 있습니다. 기본값은 루프백 바인딩, 익명 읽기 허용, 익명 편집·생성 거부입니다. 내부 시험 정책은 `WIKI_ANONYMOUS_READ`, `WIKI_ANONYMOUS_EDIT`, `WIKI_ANONYMOUS_CREATE`로 설정합니다. 익명 편집에는 읽기와 편집을, 익명 생성에는 세 가지 정책을 모두 `true`로 설정해야 합니다. Windows PowerShell에서는 `export KEY=value` 대신 `$env:KEY = 'value'`, `./gradlew` 대신 `.\gradlew.bat`를 사용합니다.
 

@@ -16,6 +16,7 @@ import wiki.liberty.domain.RevisionLookup
 import wiki.liberty.domain.RevisionMetadata
 import wiki.liberty.domain.RevisionPage
 import wiki.liberty.domain.RevisionSource
+import java.sql.Connection
 import java.sql.ResultSet
 import java.time.Instant
 import java.time.LocalDateTime
@@ -25,10 +26,32 @@ import javax.sql.DataSource
 
 @Repository
 class JdbcPages(private val jdbc: JdbcTemplate, dataSource: DataSource) : PageRepository {
-    private val maria = dataSource.connection.use {
-        when (val engine = it.metaData.databaseProductName) {
-            "MariaDB" -> true
-            "PostgreSQL" -> false
+    private val maria = dataSource.connection.use { connection ->
+        val metadata = connection.metaData
+        when (val engine = metadata.databaseProductName) {
+            "MariaDB" -> {
+                check(metadata.databaseMajorVersion > 11 ||
+                    metadata.databaseMajorVersion == 11 && metadata.databaseMinorVersion >= 8) {
+                    "MariaDB 11.8 or newer is required."
+                }
+                check(connection.transactionIsolation == Connection.TRANSACTION_READ_COMMITTED) {
+                    "MariaDB requires READ COMMITTED transaction isolation."
+                }
+                val mode = connection.createStatement().use { statement ->
+                    statement.executeQuery("SELECT @@SESSION.sql_mode").use { result ->
+                        check(result.next())
+                        result.getString(1).split(',').toSet()
+                    }
+                }
+                check("STRICT_ALL_TABLES" in mode || "STRICT_TRANS_TABLES" in mode) {
+                    "MariaDB requires a strict SQL mode for transactional tables."
+                }
+                true
+            }
+            "PostgreSQL" -> {
+                check(metadata.databaseMajorVersion >= 17) { "PostgreSQL 17 or newer is required." }
+                false
+            }
             else -> error("Unsupported database engine: $engine")
         }
     }
@@ -191,6 +214,12 @@ class JdbcPages(private val jdbc: JdbcTemplate, dataSource: DataSource) : PageRe
         val pageId = UUID.randomUUID()
         val revisionId = UUID.randomUUID()
         val compatId = if (maria) {
+            // A committed duplicate can be reported without waiting for an edit's row lock.
+            val exists = jdbc.query(
+                "SELECT 1 FROM wiki_page WHERE namespace_id = 0 AND normalized_title = ?",
+                { _, _ -> true }, page.title.value,
+            ).isNotEmpty()
+            if (exists) return PageInsert.DuplicateTitle
             val rows = jdbc.query(
                 """
                 INSERT INTO wiki_page (id, namespace_id, normalized_title, current_revision_id)
