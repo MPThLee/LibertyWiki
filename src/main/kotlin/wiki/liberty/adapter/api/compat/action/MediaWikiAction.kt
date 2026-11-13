@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package wiki.liberty.adapter.api.compat.action
 
+import com.fasterxml.jackson.annotation.JsonInclude
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.http.MediaType
@@ -16,6 +17,7 @@ import wiki.liberty.application.PageActor
 import wiki.liberty.application.PageApplicationService
 import wiki.liberty.application.RevisionBase
 import wiki.liberty.domain.ComparisonRevisionMissing
+import wiki.liberty.domain.EditConflict
 import wiki.liberty.domain.ComparisonRevisionHidden
 import wiki.liberty.domain.PageError
 import wiki.liberty.domain.PageFailure
@@ -33,7 +35,8 @@ import java.util.Locale
 
 class ActionFailure(val code: String, message: String) : RuntimeException(message)
 data class ActionErrorEnvelope(val error: ActionError)
-data class ActionError(val code: String, val info: String)
+@JsonInclude(JsonInclude.Include.NON_NULL)
+data class ActionError(val code: String, val info: String, val docref: String? = null)
 
 @RestController
 class MediaWikiAction(private val pages: PageApplicationService, private val http: PageHttp) {
@@ -308,6 +311,15 @@ private fun unsupported(message: String): Nothing = throw ActionFailure("unsuppo
 
 @RestControllerAdvice(assignableTypes = [MediaWikiAction::class])
 class MediaWikiActionErrors {
+    @ExceptionHandler(EditConflict::class)
+    fun conflict(failure: EditConflict, request: HttpServletRequest, response: HttpServletResponse): ActionErrorEnvelope {
+        response.setHeader("MediaWiki-API-Error", "editconflict")
+        val docref = "See ${request.requestURL} for API usage. Subscribe to the mediawiki-api-announce mailing list at " +
+            "&lt;https://lists.wikimedia.org/postorius/lists/mediawiki-api-announce.lists.wikimedia.org/&gt; " +
+            "for notice of API deprecations and breaking changes."
+        return ActionErrorEnvelope(ActionError("editconflict", "Edit conflict: ${failure.title.value}", docref))
+    }
+
     @ExceptionHandler(ActionFailure::class)
     fun transport(failure: ActionFailure, request: HttpServletRequest, response: HttpServletResponse) =
         error(failure.code, failure.message.orEmpty()).also { setCompareErrorHeader(request, response, it) }

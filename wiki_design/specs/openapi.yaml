@@ -166,10 +166,13 @@ paths:
                 $ref: '#/components/schemas/Error'
         '409':
           description: EDIT_CONFLICT
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/schemas/EditConflict'
         '415':
           $ref: '#/components/responses/UnsupportedMediaType'
         '422':
@@ -1387,6 +1390,27 @@ components:
         summary:
           type: string
           maxLength: 500
+    EditConflict:
+      type: object
+      additionalProperties: false
+      required: [code, message, requestId]
+      dependentRequired:
+        comparison: [currentRevisionId]
+      properties:
+        code:
+          const: EDIT_CONFLICT
+        message:
+          type: string
+        requestId:
+          type: string
+          format: uuid
+        currentRevisionId:
+          type: string
+          format: uuid
+          description: 충돌 판정 시점의 공개 현재 리비전 UUID. 이후 저장에서는 이 UUID를 새 baseRevisionId로 명시적으로 제출할 수 있다.
+        comparison:
+          $ref: '#/components/schemas/RevisionComparison'
+          description: 요청 기준판에서 충돌 시점 공개판까지의 원문 차이. 판이 없거나 제한되었거나 비교 한도를 초과하면 생략한다. to.id는 currentRevisionId와 같다.
     Error:
       type: object
       required:

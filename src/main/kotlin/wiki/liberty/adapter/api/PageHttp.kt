@@ -14,6 +14,7 @@ import org.springframework.boot.autoconfigure.jackson.Jackson2ObjectMapperBuilde
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.stereotype.Component
@@ -44,12 +45,17 @@ class PageHttp(private val settings: PageHttpSettings, private val json: ObjectM
         return PageActor.OPERATOR
     }
 
-    fun comparisonResponse(value: Any): ResponseEntity<ByteArray> {
+    fun comparisonResponse(
+        value: Any, status: HttpStatus = HttpStatus.OK, withoutComparison: Any? = null,
+    ): ResponseEntity<ByteArray> {
         // The engine bounds the input and diff before formatting. The wire limit also covers
         // adapter-specific output such as REST sections, Action markup and JSON escaping.
         val encoded = json.writeValueAsBytes(value)
-        if (encoded.size > MAX_COMPARISON_OUTPUT_BYTES) throw PageFailure(PageError.COMPARISON_TOO_LARGE)
-        return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(encoded)
+        val body = if (encoded.size <= MAX_COMPARISON_OUTPUT_BYTES) encoded else {
+            if (withoutComparison == null) throw PageFailure(PageError.COMPARISON_TOO_LARGE)
+            json.writeValueAsBytes(withoutComparison)
+        }
+        return ResponseEntity.status(status).contentType(MediaType.APPLICATION_JSON).body(body)
     }
 }
 

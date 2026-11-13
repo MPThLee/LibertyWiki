@@ -39,7 +39,7 @@ const errorMessages: Record<string, string> = {
 }
 
 class RequestError extends Error {
-  constructor(public code: string) {
+  constructor(public code: string, public currentRevisionId?: string, public comparison?: Comparison) {
     super(errorMessages[code] ?? '요청을 처리할 수 없습니다.')
   }
 }
@@ -56,9 +56,31 @@ async function request<T>(path: string, token: string, body?: object): Promise<T
   })
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    throw new RequestError(error.code)
+    throw new RequestError(error.code, error.currentRevisionId, error.comparison)
   }
   return response.json()
+}
+
+function ComparisonView({ comparison, title }: { comparison: Comparison; title: string }) {
+  return (
+    <section aria-label={title}>
+      <h3>{title}</h3>
+      <p>시작: {comparison.from.id} · <time dateTime={comparison.from.timestamp}>{comparison.from.timestamp}</time><br />
+        끝: {comparison.to.id} · <time dateTime={comparison.to.timestamp}>{comparison.to.timestamp}</time></p>
+      {comparison.lines.length === 0 ? <p>차이가 없습니다.</p> : (
+        <div className="comparison" aria-label="Wikitext 차이">
+          {comparison.lines.map((line, index) => (
+            <div className={`diff-line diff-${line.type}`} key={index}>
+              <span className="diff-kind">{{ context: '변경 없음', added: '추가', deleted: '삭제', changed: '변경' }[line.type]}</span>
+              {([['시작', line.fromLine, line.from], ['끝', line.toLine, line.to]] as const).map(([side, number, fragments]) => number != null && (
+                <div key={side} className="diff-side"><span>{side} {number}: </span><code>{fragments.map((fragment, fragmentIndex) => fragment.changed ? <mark key={fragmentIndex}>{fragment.text}</mark> : <span key={fragmentIndex}>{fragment.text}</span>)}</code></div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  )
 }
 
 const requestPage = (path: string, token: string, body?: object) => request<SourcePage>(path, token, body)
@@ -71,8 +93,8 @@ function App() {
   const [busy, setBusy] = useState(false)
   const [draft, setDraft] = useState('')
   const [summary, setSummary] = useState('')
-  const [conflict, setConflict] = useState(false)
-  const [latest, setLatest] = useState<SourcePage>()
+  const [baseRevisionId, setBaseRevisionId] = useState('')
+  const [conflict, setConflict] = useState<RequestError>()
   const [history, setHistory] = useState<RevisionSummary[]>()
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [revision, setRevision] = useState<Revision>()
@@ -80,6 +102,7 @@ function App() {
   const [compareTo, setCompareTo] = useState('')
   const [comparison, setComparison] = useState<Comparison>()
   const [pendingDraft, setPendingDraft] = useState<PendingDraft>()
+  const conflictRevisionId = conflict?.currentRevisionId
 
   function clearHistory() {
     setHistory(undefined)
@@ -91,15 +114,14 @@ function App() {
   }
 
   function changeToken(value: string) {
-    if (page && (draft !== page.source || summary || conflict)) {
-      setPendingDraft({ pageId: page.id, baseRevisionId: page.currentRevisionId, source: draft, summary })
+    if (page && (draft !== page.source || summary || conflict || baseRevisionId !== page.currentRevisionId)) {
+      setPendingDraft({ pageId: page.id, baseRevisionId, source: draft, summary })
     }
     setToken(value)
     setPage(undefined)
     setDraft('')
     setSummary('')
-    setLatest(undefined)
-    setConflict(false)
+    setConflict(undefined)
     clearHistory()
     setError('')
     setStatus('')
@@ -114,8 +136,6 @@ function App() {
     setStatus('요청 처리 중')
     setPage(undefined)
     clearHistory()
-    setConflict(false)
-    setLatest(undefined)
     setBusy(true)
     try {
       if (!create && (title === '.' || title === '..')) throw new Error(errorMessages.INVALID_TITLE)
@@ -128,17 +148,16 @@ function App() {
         })
         : await requestPage(`/api/v1/pages/by-title/${encodeURIComponent(title)}`, token)
       const restored = pendingDraft?.pageId === result.id ? pendingDraft : undefined
-      const changed = restored !== undefined && restored.baseRevisionId !== result.currentRevisionId
       setPendingDraft(undefined)
       setPage(result)
+      setBaseRevisionId(restored?.baseRevisionId ?? result.currentRevisionId)
       setDraft(restored?.source ?? result.source)
       setSummary(restored?.summary ?? '')
-      if (changed) {
-        setConflict(true)
-        setLatest(result)
+      if (restored && restored.baseRevisionId !== result.currentRevisionId) {
+        setConflict(new RequestError('EDIT_CONFLICT', result.currentRevisionId))
         setError(errorMessages.EDIT_CONFLICT)
       }
-      setStatus(create ? '문서를 만들었습니다.' : '현재 원문을 불러왔습니다.')
+      setStatus(restored ? '작성 중인 원문과 요약을 복원했습니다.' : create ? '문서를 만들었습니다.' : '현재 원문을 불러왔습니다.')
     } catch (failure) {
       if (failure instanceof DOMException && failure.name === 'TimeoutError') {
         setError('응답 시간이 초과되었습니다.')
@@ -159,34 +178,20 @@ function App() {
     setStatus('저장 중')
     try {
       const result = await requestPage(`/api/v1/pages/${encodeURIComponent(page.id)}/revisions`, token, {
-        baseRevisionId: page.currentRevisionId,
+        baseRevisionId,
         source: draft,
         summary,
       })
       setPage(result)
+      setBaseRevisionId(result.currentRevisionId)
       clearHistory()
       setDraft(result.source)
       setSummary('')
       setStatus('편집을 저장했습니다.')
     } catch (failure) {
-      if (failure instanceof RequestError && failure.code === 'EDIT_CONFLICT') setConflict(true)
-      setError(failure instanceof Error ? failure.message : '요청을 처리할 수 없습니다.')
-      setStatus('')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function fetchLatest() {
-    if (!page || busy) return
-    setBusy(true)
-    setError('')
-    setLatest(undefined)
-    try {
-      const result = await requestPage(`/api/v1/pages/${encodeURIComponent(page.id)}`, token)
-      setLatest(result)
-      setStatus('최신 원문을 불러왔습니다. 작성 중인 원문은 유지됩니다.')
-    } catch (failure) {
+      if (failure instanceof RequestError && failure.code === 'EDIT_CONFLICT') {
+        setConflict(failure)
+      }
       setError(failure instanceof Error ? failure.message : '요청을 처리할 수 없습니다.')
       setStatus('')
     } finally {
@@ -266,14 +271,14 @@ function App() {
           <form onSubmit={event => void submit(event, false)}>
             <h2>제목으로 찾기</h2>
             <label>조회할 제목<input name="title" required /></label>
-            <button disabled={busy || conflict}>원문 조회</button>
+            <button disabled={busy || !!conflict}>원문 조회</button>
           </form>
           <form onSubmit={event => void submit(event, true)}>
             <h2>새 문서 만들기</h2>
             <label>새 문서 제목<input name="title" required /></label>
             <label>Wikitext 원문<textarea name="source" rows={8} spellCheck={false} /></label>
             <label>편집 요약 (선택)<input name="summary" maxLength={500} /></label>
-            <button disabled={busy || conflict}>문서 생성</button>
+            <button disabled={busy || !!conflict}>문서 생성</button>
           </form>
         </div>
         <div role="status">{status}</div>
@@ -281,7 +286,7 @@ function App() {
         {page && (
           <section aria-labelledby="result-title">
             <h2 id="result-title">{page.normalizedTitle}</h2>
-            <pre aria-label="현재 Wikitext 원문">{page.source}</pre>
+            <pre aria-label={conflict || baseRevisionId !== page.currentRevisionId ? '조회한 Wikitext 원문' : '현재 Wikitext 원문'}>{page.source}</pre>
             <div>
               <h3>문서 이력</h3>
               <button type="button" disabled={busy} onClick={() => void fetchHistory()}>문서 이력 보기</button>
@@ -303,26 +308,8 @@ function App() {
                   {nextCursor && <button type="button" disabled={busy} onClick={() => void fetchHistory(nextCursor)}>이력 더 보기</button>}
                 </>
               )}
-              {comparison && (
-                <section aria-labelledby="comparison-title">
-                  <h3 id="comparison-title">리비전 비교</h3>
-                  <p>시작: {comparison.from.id} · <time dateTime={comparison.from.timestamp}>{comparison.from.timestamp}</time><br />
-                    끝: {comparison.to.id} · <time dateTime={comparison.to.timestamp}>{comparison.to.timestamp}</time></p>
-                  {comparison.lines.length === 0 ? <p>차이가 없습니다.</p> : (
-                    <div className="comparison" aria-label="Wikitext 차이">
-                      {comparison.lines.map((line, index) => (
-                        <div className={`diff-line diff-${line.type}`} key={index}>
-                          <span className="diff-kind">{{ context: '변경 없음', added: '추가', deleted: '삭제', changed: '변경' }[line.type]}</span>
-                          {([['시작', line.fromLine, line.from], ['끝', line.toLine, line.to]] as const).map(([side, number, fragments]) => number != null && (
-                            <div key={side} className="diff-side"><span>{side} {number}: </span><code>{fragments.map((fragment, fragmentIndex) => fragment.changed ? <mark key={fragmentIndex}>{fragment.text}</mark> : <span key={fragmentIndex}>{fragment.text}</span>)}</code></div>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </section>
-              )}
-              {revision && (
+              {comparison && <ComparisonView comparison={comparison} title="리비전 비교" />}
+              {revision && revision.id !== conflictRevisionId && (
                 <div>
                   <h3>이전 리비전 {revision.id}</h3>
                   <p><time dateTime={revision.createdAt}>{revision.createdAt}</time> · {revision.summary}</p>
@@ -334,20 +321,26 @@ function App() {
               <h3>원문 편집</h3>
               <label>편집할 Wikitext 원문<textarea value={draft} onChange={event => setDraft(event.target.value)} disabled={busy} rows={8} spellCheck={false} /></label>
               <label>편집 요약<input value={summary} onChange={event => setSummary(event.target.value)} disabled={busy} /></label>
-              <button disabled={busy || conflict}>편집 저장</button>
+              <button disabled={busy || !!conflict}>편집 저장</button>
             </form>
             {conflict && (
               <div>
-                <p>최신 원문을 확인하고 작성한 원문을 직접 조정한 후 저장 기준으로 선택하세요.</p>
-                <button type="button" disabled={busy} onClick={() => void fetchLatest()}>최신 원문 확인</button>
-                <button type="button" disabled={busy} onClick={() => { setPage(undefined); clearHistory(); setLatest(undefined); setConflict(false); setError(''); setStatus('편집을 취소했습니다.') }}>초안 버리고 편집 취소</button>
-                {latest && (
-                  <div>
-                    <h3>최신 원문</h3>
-                    <pre aria-label="최신 Wikitext 원문">{latest.source}</pre>
-                    <button type="button" disabled={busy} onClick={() => { setPage(latest); clearHistory(); setLatest(undefined); setConflict(false); setError(''); setStatus('최신 리비전을 저장 기준으로 선택했습니다. 작성한 원문을 검토한 후 저장하세요.') }}>최신 리비전을 저장 기준으로 선택</button>
-                  </div>
+                {conflict.comparison ? <ComparisonView comparison={conflict.comparison} title="충돌 리비전 비교" /> : <p>리비전 비교를 표시할 수 없습니다. 작성한 원문과 요약은 유지됩니다.</p>}
+                {conflictRevisionId && (
+                  <>
+                    <button type="button" disabled={busy} onClick={() => void fetchRevision(conflictRevisionId)}>충돌 시점 원문 보기</button>
+                    {(revision?.id === conflictRevisionId || page.currentRevisionId === conflictRevisionId) && (
+                      <pre aria-label="충돌 시점 Wikitext 원문">{revision?.id === conflictRevisionId ? revision.source : page.source}</pre>
+                    )}
+                    <button type="button" disabled={busy} onClick={() => {
+                      setBaseRevisionId(conflictRevisionId)
+                      setConflict(undefined)
+                      setError('')
+                      setStatus('충돌 시점 리비전을 저장 기준으로 선택했습니다. 작성한 원문을 검토한 후 저장하세요.')
+                    }}>충돌 리비전을 저장 기준으로 선택</button>
+                  </>
                 )}
+                <button type="button" disabled={busy} onClick={() => { setPage(undefined); clearHistory(); setConflict(undefined); setError(''); setStatus('편집을 취소했습니다.') }}>초안 버리고 편집 취소</button>
               </div>
             )}
           </section>

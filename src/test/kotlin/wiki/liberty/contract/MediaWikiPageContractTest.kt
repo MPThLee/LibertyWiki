@@ -40,7 +40,8 @@ class MediaWikiPageContractTest {
         val baseline = baseline()
         val local = ContractHttp("http://127.0.0.1:$port")
         val title = "Edit_${UUID.randomUUID()}"
-        assertThat(observeEdit(local, title)).isEqualTo(observeEdit(baseline, title))
+        assertThat(observeEdit(local, title, includeConflictDiff = true))
+            .isEqualTo(observeEdit(baseline, title, includeConflictDiff = false))
     }
 
     @Test
@@ -191,10 +192,10 @@ class MediaWikiPageContractTest {
         return baseline
     }
 
-    private fun observeEdit(http: ContractHttp, title: String): Map<String, Any> {
+    private fun observeEdit(http: ContractHttp, title: String, includeConflictDiff: Boolean): Map<String, Any> {
         val original = http.actionCreate(title, "Original").json.at("/edit/newrevid").asLong()
         assertThat(original).isPositive()
-        val action = http.actionEdit("title" to title, "Action edit", original)
+        val action = http.actionEdit("title" to title, "== Heading ==\nOld word end", original)
         val saved = action.json["edit"]
         assertThat(action.status).isEqualTo(200)
         assertThat(saved["result"].asText()).isEqualTo("Success")
@@ -202,23 +203,77 @@ class MediaWikiPageContractTest {
         val actionId = saved["newrevid"].asLong()
         assertThat(actionId).isNotEqualTo(original)
 
-        val rest = http.restEdit(title, "REST edit", actionId)
+        val published = "== Heading ==\nNew word end"
+        val rest = http.restEdit(title, published, actionId)
         assertThat(rest.status).isEqualTo(200)
-        assertThat(rest.json["source"].asText()).isEqualTo("REST edit")
+        assertThat(rest.json["source"].asText()).isEqualTo(published)
         val revision = readAction(http, title).at("/query/pages/0/revisions/0")
         assertThat(revision["revid"]).isEqualTo(rest.json.at("/latest/id"))
         assertThat(revision["parentid"].asLong()).isEqualTo(actionId)
-        assertThat(revision.at("/slots/main/content").asText()).isEqualTo("REST edit")
+        assertThat(revision.at("/slots/main/content").asText()).isEqualTo(published)
 
-        val staleAction = http.actionEdit("title" to title, "Conflicting Action edit", actionId)
-        val staleRest = http.restEdit(title, "Conflicting REST edit", actionId)
-        assertThat(http.restRead(title).json.at("/latest/id")).isEqualTo(revision["revid"])
+        val draft = "== Heading ==\nDraft word end"
+        val missingBase = 999_999_999L
+        val staleAction = http.actionEdit("title" to title, draft, actionId)
+        val unknownAction = http.actionEdit("title" to title, draft, missingBase)
+        val staleRest = http.restEdit(title, draft, actionId)
+        val unknownRest = http.restEdit(title, draft, missingBase)
+        val currentId = revision["revid"].asLong()
+        val storedComparison = http.restCompare(actionId, currentId)
+        assertThat(storedComparison.status).isEqualTo(200)
+        assertThat(storedComparison.json.at("/from/id").asLong()).isEqualTo(actionId)
+        assertThat(storedComparison.json.at("/to/id").asLong()).isEqualTo(currentId)
+        val diffTexts = storedComparison.json["diff"].map { it["text"].asText() }
+        assertThat(diffTexts).containsExactly("== Heading ==", "OldNew word end")
+        // The pinned fixture may omit the documented conflict diff. Its compare route supplies the oracle.
+        if (includeConflictDiff || staleRest.json.has("diff")) {
+            assertThat(staleRest.json.select("from", "to", "diff"))
+                .isEqualTo(storedComparison.json.select("from", "to", "diff"))
+        }
+        assertThat(unknownRest.json.fieldNames().asSequence().toList())
+            .containsExactlyInAnyOrder("errorKey", "messageTranslations", "httpCode", "httpReason")
+        val after = http.restRead(title)
+        assertThat(after.json.at("/latest/id").asLong()).isEqualTo(currentId)
+        assertThat(after.json["source"].asText()).isEqualTo(published)
+        assertThat(http.restHistory(title).json["revisions"].map { it["id"].asLong() })
+            .containsExactly(currentId, actionId, original)
+
+        fun actionConflict(result: ContractHttp.Result): Map<String, JsonNode> {
+            assertThat(result.status).isEqualTo(200)
+            assertThat(result.header("MediaWiki-API-Error")).isEqualTo("editconflict")
+            val error = result.json["error"]
+            assertThat(error["code"].asText()).isEqualTo("editconflict")
+            assertThat(error["info"].asText()).isEqualTo("Edit conflict: ${title.replace('_', ' ')}")
+            assertThat(error["docref"].asText()).matches(
+                "See https?://[^ ]+/api\\.php for API usage\\. Subscribe to the mediawiki-api-announce mailing list at " +
+                    "&lt;https://lists\\.wikimedia\\.org/postorius/lists/mediawiki-api-announce\\.lists\\.wikimedia\\.org/&gt; " +
+                    "for notice of API deprecations and breaking changes\\.",
+            )
+            return error.select("code", "info")
+        }
+
+        fun restConflict(result: ContractHttp.Result): Map<String, JsonNode> {
+            assertThat(result.status).isEqualTo(409)
+            assertThat(result.json["errorKey"].asText()).isEqualTo("editconflict")
+            assertThat(result.json["httpCode"].asInt()).isEqualTo(409)
+            assertThat(result.json["httpReason"].asText()).isEqualTo("Conflict")
+            assertThat(result.json.at("/messageTranslations/en").asText()).isEqualTo("Edit conflict: ${title.replace('_', ' ')}")
+            return result.json.select("errorKey", "messageTranslations", "httpCode", "httpReason")
+        }
+
         val missing = "${title}_Missing"
         return mapOf(
             "action" to saved.select("result", "title", "contentmodel"),
             "rest" to rest.json.select("title", "key", "content_model", "source"),
-            "actionConflict" to (staleAction.status to staleAction.json.at("/error/code").asText()),
-            "restConflict" to restError(staleRest),
+            "actionConflict" to actionConflict(staleAction),
+            "actionUnknownBase" to actionConflict(unknownAction),
+            "restConflict" to restConflict(staleRest),
+            "restUnknownBase" to restConflict(unknownRest),
+            "publishedComparison" to listOf(
+                storedComparison.json.at("/from/sections"),
+                storedComparison.json.at("/to/sections"),
+                storedComparison.json["diff"],
+            ),
             "actionMissingTitle" to http.actionEdit("title" to missing, "Missing", actionId)
                 .json.at("/error/code").asText(),
             "restMissingTitle" to restError(http.restEdit(missing, "Missing", actionId)),

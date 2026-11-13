@@ -139,13 +139,24 @@ class PagePostgresTest {
     @Test
     fun `REST comparison limits serialized section metadata even for identical source`() {
         val title = "Large-heading-${UUID.randomUUID()}"
-        val created = http.nativeCreate(title, "== ${"\u0001".repeat(350_000)} ==")
+        val source = "== ${"\u0001".repeat(350_000)} =="
+        val created = http.nativeCreate(title, source)
         assertThat(created.status).isEqualTo(201)
         val id = http.restRead(title, operatorToken).json.at("/latest/id").asLong()
         assertThat(id).isPositive()
         val comparison = http.restCompare(id, id, operatorToken)
         assertThat(comparison.status).isEqualTo(422)
         assertThat(comparison.json["errorKey"].asText()).isEqualTo("comparison-too-large")
+
+        val updated = http.restEdit(title, source, id, auth = operatorToken)
+        assertThat(updated.status).isEqualTo(200)
+        val before = rowCounts()
+        val conflict = http.restEdit(title, "Draft", id, auth = operatorToken)
+        assertThat(conflict.status).isEqualTo(409)
+        assertThat(conflict.json["errorKey"].asText()).isEqualTo("editconflict")
+        assertThat(conflict.json.has("diff")).isFalse()
+        assertThat(http.restRead(title, operatorToken).json.at("/latest/id")).isEqualTo(updated.json.at("/latest/id"))
+        assertThat(rowCounts()).isEqualTo(before)
     }
 
     @Test
@@ -319,11 +330,79 @@ class PagePostgresTest {
         assertThat(stale.status).isEqualTo(409)
         assertSchema("/paths/~1pages~1{pageId}~1revisions/post/responses/409", stale.json)
         assertThat(stale.json["code"].asText()).isEqualTo("EDIT_CONFLICT")
+        assertThat(stale.json["currentRevisionId"].asText()).isEqualTo(edited.json["currentRevisionId"].asText())
+        val expected = http.get("/api/v1/revisions/$base/compare/${edited.json["currentRevisionId"].asText()}", operatorToken)
+        assertThat(expected.status).isEqualTo(200)
+        assertThat(stale.json["comparison"]).isEqualTo(expected.json)
+        assertThat(stale.json.toString()).doesNotContain("Stale draft")
         assertThat(http.get("$native/$pageId", operatorToken).json).isEqualTo(edited.json)
         assertThat(rowCounts()).containsExactly(before[0], before[1] + 1, before[2] + 1, before[3] + 1)
         assertThat(jdbc.queryForObject(
             "SELECT source FROM wiki_revision WHERE id = ?", String::class.java, UUID.fromString(base),
         )).isEqualTo(source)
+    }
+
+    @Test
+    fun `conflicts preserve state and unavailable or oversized bases fall back without a diff`() {
+        val title = "Conflict-${UUID.randomUUID()}"
+        val created = http.nativeCreate(title, "base\n").json
+        val pageId = created["id"].asText()
+        val base = created["currentRevisionId"].asText()
+        val compatBase = http.restRead(title, operatorToken).json.at("/latest/id").asLong()
+        val path = "$native/$pageId/revisions"
+        val head = http.postJson(path, mapOf("baseRevisionId" to base, "source" to "published head\n"), operatorToken).json
+        val headId = head["currentRevisionId"].asText()
+        val foreign = http.nativeCreate("Foreign-${UUID.randomUUID()}", "foreign secret").json["currentRevisionId"].asText()
+        val before = rowCounts()
+        val expected = http.get("/api/v1/revisions/$base/compare/$headId", operatorToken).json
+        val conflict = http.postJson(path, mapOf("baseRevisionId" to base, "source" to "draft secret"), operatorToken)
+        assertThat(conflict.status).isEqualTo(409)
+        assertSchema("/paths/~1pages~1{pageId}~1revisions/post/responses/409", conflict.json)
+        assertThat(conflict.json["currentRevisionId"].asText()).isEqualTo(headId)
+        assertThat(conflict.json["comparison"]).isEqualTo(expected)
+        assertThat(conflict.json.toString()).doesNotContain("draft secret")
+        val rest = http.restEdit(title, "REST draft secret", compatBase, auth = operatorToken)
+        assertThat(rest.status).isEqualTo(409)
+        val compatHead = http.restRead(title, operatorToken).json.at("/latest/id").asLong()
+        val restComparison = http.restCompare(compatBase, compatHead, operatorToken).json
+        for (field in listOf("from", "to", "diff")) {
+            assertThat(rest.json[field]).isEqualTo(restComparison[field])
+        }
+        assertThat(rest.json.toString()).doesNotContain("REST draft secret")
+        val action = http.actionEdit("title" to title, "Action draft secret", compatBase, auth = operatorToken)
+        assertThat(action.json.at("/error/code").asText()).isEqualTo("editconflict")
+        assertThat(action.json.has("compare")).isFalse()
+        for (unavailable in listOf(UUID.randomUUID().toString(), foreign)) {
+            val fallback = http.postJson(path, mapOf("baseRevisionId" to unavailable, "source" to "draft secret"), operatorToken)
+            assertThat(fallback.status).isEqualTo(409)
+            assertSchema("/paths/~1pages~1{pageId}~1revisions/post/responses/409", fallback.json)
+            assertThat(fallback.json["currentRevisionId"].asText()).isEqualTo(headId)
+            assertThat(fallback.json.has("comparison")).isFalse()
+            assertThat(fallback.json.toString()).doesNotContain("foreign secret", "draft secret", "published head")
+        }
+        assertThat(http.get("$native/$pageId", operatorToken).json).isEqualTo(head)
+        assertThat(rowCounts()).isEqualTo(before)
+
+        val largeTitle = "Large-conflict-${UUID.randomUUID()}"
+        val large = http.nativeCreate(largeTitle, "line\n".repeat(4_000)).json
+        val compatLargeBase = http.restRead(largeTitle, operatorToken).json.at("/latest/id").asLong()
+        val largePath = "$native/${large["id"].asText()}/revisions"
+        val largeBase = large["currentRevisionId"].asText()
+        val largeHead = http.postJson(largePath, mapOf("baseRevisionId" to largeBase, "source" to "new head"), operatorToken).json
+        val largeBefore = rowCounts()
+        val limited = http.postJson(largePath, mapOf("baseRevisionId" to largeBase, "source" to "draft"), operatorToken)
+        assertThat(limited.status).isEqualTo(409)
+        assertSchema("/paths/~1pages~1{pageId}~1revisions/post/responses/409", limited.json)
+        assertThat(limited.json["currentRevisionId"]).isEqualTo(largeHead["currentRevisionId"])
+        assertThat(limited.json.has("comparison")).isFalse()
+        val limitedRest = http.restEdit(largeTitle, "draft", compatLargeBase, auth = operatorToken)
+        assertThat(limitedRest.status).isEqualTo(409)
+        assertThat(limitedRest.json.has("diff")).isFalse()
+        val limitedAction = http.actionEdit("title" to largeTitle, "draft", compatLargeBase, auth = operatorToken)
+        assertThat(limitedAction.status).isEqualTo(200)
+        assertThat(limitedAction.header("MediaWiki-API-Error")).isEqualTo("editconflict")
+        assertThat(http.get("$native/${large["id"].asText()}", operatorToken).json).isEqualTo(largeHead)
+        assertThat(rowCounts()).isEqualTo(largeBefore)
     }
 
     @Test
@@ -415,6 +494,17 @@ class PagePostgresTest {
         if (!wins[2]) assertThat(results[2].json.at("/error/code").asText()).isEqualTo("editconflict")
         val current = http.get("$native/$pageId", operatorToken).json
         assertThat(current["source"].asText()).isEqualTo(listOf("Native winner", "REST winner", "Action winner")[wins.indexOf(true)])
+        if (!wins[0]) {
+            assertSchema("/paths/~1pages~1{pageId}~1revisions/post/responses/409", results[0].json)
+            assertThat(results[0].json["currentRevisionId"]).isEqualTo(current["currentRevisionId"])
+            val expected = http.get("/api/v1/revisions/$base/compare/${current["currentRevisionId"].asText()}", operatorToken)
+            assertThat(results[0].json["comparison"]).isEqualTo(expected.json)
+        }
+        if (!wins[1]) {
+            val published = http.restRead(title, operatorToken).json.at("/latest/id").asLong()
+            assertThat(results[1].json.at("/to/id").asLong()).isEqualTo(published)
+            assertThat(results[1].json["diff"]).isEqualTo(http.restCompare(compatBase, published, operatorToken).json["diff"])
+        }
         assertThat(rowCounts()).containsExactly(before[0], before[1] + 1, before[2] + 1, before[3] + 1)
     }
 

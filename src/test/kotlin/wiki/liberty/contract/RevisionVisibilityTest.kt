@@ -74,12 +74,38 @@ class RevisionVisibilityTest {
         assertThat(http.restRead(title).json["source"].asText()).isEqualTo("Visible source")
         assertThat(counts()).isEqualTo(before)
 
+        val hiddenBase = http.postJson("/api/v1/pages/$pageId/revisions",
+            mapOf("baseRevisionId" to restricted, "source" to "Draft secret"))
+        assertThat(hiddenBase.status).isEqualTo(409)
+        assertThat(hiddenBase.json["currentRevisionId"].asText()).isEqualTo(visible)
+        assertThat(hiddenBase.json.has("comparison")).isFalse()
+        assertThat(hiddenBase.json.toString()).doesNotContain("Secret source", "Visible source", "Draft secret")
+        val hiddenRest = http.restEdit(title, "Draft secret", first)
+        assertThat(hiddenRest.status).isEqualTo(409)
+        assertThat(hiddenRest.json.has("diff")).isFalse()
+        assertThat(hiddenRest.json.toString()).doesNotContain("Secret source", "Visible source", "Draft secret")
+        val hiddenAction = http.actionEdit("title" to title, "Draft secret", first)
+        assertThat(hiddenAction.json.at("/error/code").asText()).isEqualTo("editconflict")
+        assertThat(hiddenAction.json.toString()).doesNotContain("Secret source", "Visible source", "Draft secret")
+        assertThat(counts()).isEqualTo(before)
+
         jdbc.update("INSERT INTO wiki_revision_source_restriction (revision_id) VALUES (?)", UUID.fromString(visible))
         assertThat(http.get("/api/v1/pages/$pageId").status).isEqualTo(403)
         assertThat(http.restRead(title).status).isEqualTo(403)
         assertThat(http.postJson("/api/v1/pages/$pageId/revisions",
             mapOf("baseRevisionId" to visible, "source" to "Attempted edit")).status).isEqualTo(403)
+        val deniedRest = http.restEdit(title, "Draft secret", first)
+        assertThat(deniedRest.status).isEqualTo(403)
+        assertThat(deniedRest.json.toString()).doesNotContain("Secret source", "Visible source", "Draft secret")
+        val deniedAction = http.actionEdit("title" to title, "Draft secret", first)
+        assertThat(deniedAction.json.toString()).doesNotContain("Secret source", "Visible source", "Draft secret")
+        val operatorConflict = http.postJson("/api/v1/pages/$pageId/revisions",
+            mapOf("baseRevisionId" to restricted, "source" to "Draft secret"), operatorToken)
+        assertThat(operatorConflict.status).isEqualTo(409)
+        assertThat(operatorConflict.json.has("currentRevisionId")).isFalse()
+        assertThat(operatorConflict.json.has("comparison")).isFalse()
         assertThat(http.get("/api/v1/pages/$pageId", operatorToken).json).isEqualTo(edited.json)
+        assertThat(counts()).containsExactlyElementsOf(before.dropLast(1) + (before.last()!! + 1))
     }
 
     private fun counts() = listOf("wiki_page", "wiki_revision", "wiki_audit", "wiki_outbox", "wiki_revision_source_restriction")

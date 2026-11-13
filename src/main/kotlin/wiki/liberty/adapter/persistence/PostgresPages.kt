@@ -8,7 +8,6 @@ import wiki.liberty.application.HistoryDirection
 import wiki.liberty.application.HistoryWindow
 import wiki.liberty.application.PageInsert
 import wiki.liberty.application.PageRepository
-import wiki.liberty.application.RevisionAppend
 import wiki.liberty.application.RevisionWrite
 import wiki.liberty.domain.Page
 import wiki.liberty.domain.PageLookup
@@ -28,16 +27,28 @@ class PostgresPages(private val jdbc: JdbcTemplate) : PageRepository {
     override fun findByCompatId(id: PageLookup.CompatId) = find("p.compat_id = ?", id.value)
 
     override fun findRevisionPage(lookup: PageLookup): RevisionPage? {
-        val (condition, key) = when (lookup) {
-            is PageLookup.Title -> "p.namespace_id = 0 AND p.normalized_title = ?" to lookup.input
-            is PageLookup.Id -> "p.id = ?" to lookup.value
-            is PageLookup.CompatId -> "p.compat_id = ?" to lookup.value
-        }
+        val (condition, key) = pageKey(lookup)
         return jdbc.query(
             "SELECT p.id, p.compat_id, p.normalized_title, p.current_revision_id FROM wiki_page p WHERE $condition",
             { row, _ -> revisionPage(row) },
             key,
         ).singleOrNull()
+    }
+
+    override fun lockForEdit(lookup: PageLookup): Page? {
+        val (condition, key) = pageKey(lookup)
+        val id = jdbc.query(
+            "SELECT p.id FROM wiki_page p WHERE $condition FOR UPDATE",
+            { row, _ -> row.getObject("id", UUID::class.java) }, key,
+        ).singleOrNull() ?: return null
+        // Read the committed revision and visibility after acquiring the page lock.
+        return findById(PageLookup.Id(id))
+    }
+
+    private fun pageKey(lookup: PageLookup) = when (lookup) {
+        is PageLookup.Title -> "p.namespace_id = 0 AND p.normalized_title = ?" to lookup.input
+        is PageLookup.Id -> "p.id = ?" to lookup.value
+        is PageLookup.CompatId -> "p.compat_id = ?" to lookup.value
     }
 
     override fun findRevision(lookup: RevisionLookup): RevisionSource? {
@@ -168,23 +179,23 @@ class PostgresPages(private val jdbc: JdbcTemplate) : PageRepository {
         return PageInsert.Created(Page(pageId, compatId, page.title, revisionId, compatRevisionId, revision.source, revision.createdAt))
     }
 
-    override fun append(base: Page, revision: RevisionWrite): RevisionAppend {
+    override fun append(base: Page, revision: RevisionWrite): Page {
         val revisionId = UUID.randomUUID()
         // The deferred foreign key permits claiming the head before inserting the revision.
         val updated = jdbc.update(
             "UPDATE wiki_page SET current_revision_id = ? WHERE id = ? AND current_revision_id = ?",
             revisionId, base.id, base.revisionId,
         )
-        if (updated == 0) return RevisionAppend.StaleBase
+        check(updated == 1) { "The locked page no longer has the expected current revision." }
         val compatRevisionId = writeRevision(base.id, revisionId, base.revisionId, revision, "revision.committed")
-        return RevisionAppend.Committed(base.copy(
+        return base.copy(
             revisionId = revisionId,
             compatRevisionId = compatRevisionId,
             source = revision.source,
             createdAt = revision.createdAt,
             compatParentRevisionId = base.compatRevisionId,
             sourceRestricted = false,
-        ))
+        )
     }
 
     private fun writeRevision(

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package wiki.liberty.adapter.api.nativeapi
 
+import com.fasterxml.jackson.annotation.JsonInclude
 import jakarta.servlet.http.HttpServletRequest
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
@@ -17,10 +18,12 @@ import wiki.liberty.application.HistoryRequest
 import wiki.liberty.application.PageActor
 import wiki.liberty.application.PageApplicationService
 import wiki.liberty.application.RevisionBase
+import wiki.liberty.domain.EditConflict
 import wiki.liberty.domain.Page
 import wiki.liberty.domain.PageError
 import wiki.liberty.domain.PageFailure
 import wiki.liberty.domain.PageLookup
+import wiki.liberty.domain.RevisionComparison
 import wiki.liberty.domain.RevisionLookup
 import wiki.liberty.domain.RevisionMetadata
 import wiki.liberty.domain.RevisionSource
@@ -43,6 +46,14 @@ data class NativeSourcePage(
 )
 
 data class NativeError(val code: String, val message: String, val requestId: UUID)
+@JsonInclude(JsonInclude.Include.NON_NULL)
+data class NativeEditConflict(
+    val code: String,
+    val message: String,
+    val requestId: UUID,
+    val currentRevisionId: UUID?,
+    val comparison: NativeRevisionComparison? = null,
+)
 data class NativeRevisionEntry(val id: UUID, val parentRevisionId: UUID?, val createdAt: Instant, val summary: String)
 data class NativeHistory(val revisions: List<NativeRevisionEntry>, val nextCursor: UUID?)
 data class NativeRevisionSource(
@@ -69,6 +80,19 @@ data class NativeRevisionComparison(
     val to: NativeComparisonRevision,
     val lines: List<NativeDiffLine>,
 )
+
+private fun RevisionComparison.native() = NativeRevisionComparison(
+    from.nativeComparisonRevision(), to.nativeComparisonRevision(),
+    lines.map { line ->
+        NativeDiffLine(line.type.name.lowercase(), line.fromLine, line.toLine,
+            line.from.map { NativeDiffFragment(it.text, it.changed) },
+            line.to.map { NativeDiffFragment(it.text, it.changed) })
+    },
+)
+
+private fun RevisionSource.nativeComparisonRevision() =
+    NativeComparisonRevision(revision.id, page.id, page.title.value, revision.createdAt)
+
 class NativePageMissing : RuntimeException()
 enum class NativeIdKind { PAGE, BASE_REVISION, REVISION }
 class InvalidNativeId(val kind: NativeIdKind) : RuntimeException()
@@ -145,15 +169,7 @@ class NativePages(private val pages: PageApplicationService, private val http: P
         pages.requireRead(actor)
         val from = RevisionLookup.Id(parseId(fromId, NativeIdKind.REVISION))
         val to = RevisionLookup.Id(parseId(toId, NativeIdKind.REVISION))
-        val comparison = pages.compareRevisions(actor, from, to)
-        return http.comparisonResponse(NativeRevisionComparison(
-            comparison.from.nativeComparisonRevision(), comparison.to.nativeComparisonRevision(),
-            comparison.lines.map { line ->
-                NativeDiffLine(line.type.name.lowercase(), line.fromLine, line.toLine,
-                    line.from.map { NativeDiffFragment(it.text, it.changed) },
-                    line.to.map { NativeDiffFragment(it.text, it.changed) })
-            },
-        ))
+        return http.comparisonResponse(pages.compareRevisions(actor, from, to).native())
     }
 
     @GetMapping("/pages/by-title/{title}")
@@ -191,12 +207,21 @@ class NativePages(private val pages: PageApplicationService, private val http: P
 
     private fun Page.native() = NativeSourcePage(id, 0, title.value, revisionId, "ACTIVE", source, "wikitext", createdAt)
     private fun RevisionMetadata.native() = NativeRevisionEntry(id, parentId, createdAt, summary)
-    private fun RevisionSource.nativeComparisonRevision() =
-        NativeComparisonRevision(revision.id, page.id, page.title.value, revision.createdAt)
 }
 
 @RestControllerAdvice(assignableTypes = [NativePages::class])
-class NativePageErrors {
+class NativePageErrors(private val http: PageHttp) {
+    @ExceptionHandler(EditConflict::class)
+    fun conflict(failure: EditConflict, request: HttpServletRequest): ResponseEntity<ByteArray> {
+        val error = NativeEditConflict(
+            PageError.EDIT_CONFLICT.name, "The page has changed since the base revision.",
+            request.requestId(), failure.currentRevisionId,
+        )
+        return http.comparisonResponse(
+            error.copy(comparison = failure.comparison?.native()), HttpStatus.CONFLICT, error,
+        )
+    }
+
     @ExceptionHandler(PageFailure::class)
     fun domain(failure: PageFailure, request: HttpServletRequest): ResponseEntity<NativeError> {
         val status = when (failure.error) {

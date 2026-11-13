@@ -3,11 +3,14 @@ package wiki.liberty.application
 
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.stereotype.Service
+import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionTemplate
 import wiki.liberty.domain.ComparisonRevisionHidden
 import wiki.liberty.domain.ComparisonRevisionMissing
 import wiki.liberty.domain.ComparisonSide
 import wiki.liberty.domain.DiffResult
+import wiki.liberty.domain.EditConflict
 import wiki.liberty.domain.Page
 import wiki.liberty.domain.PageError
 import wiki.liberty.domain.PageFailure
@@ -63,8 +66,13 @@ data class RevisionHistory(
 )
 
 @Service
-class PageApplicationService(private val repository: PageRepository, private val policy: PagePolicy) {
+class PageApplicationService(
+    private val repository: PageRepository,
+    private val policy: PagePolicy,
+    transactions: PlatformTransactionManager,
+) {
     private val wikitextDiff = WikitextDiff()
+    private val editTransaction = TransactionTemplate(transactions).apply { timeout = 8 }
 
     fun read(actor: PageActor, lookup: PageLookup): PageRead {
         requireRead(actor)
@@ -96,14 +104,10 @@ class PageApplicationService(private val repository: PageRepository, private val
             throw ComparisonRevisionHidden(ComparisonSide.TO, to)
         }
         if (left.page.id != right.page.id) throw PageFailure(PageError.REVISION_PAGE_MISMATCH)
-        return when (val diff = wikitextDiff.compare(left.source, right.source)) {
-            is DiffResult.Success -> RevisionComparison(
-                left.copy(revision = visibleMetadata(actor, left.revision)),
-                right.copy(revision = visibleMetadata(actor, right.revision)),
-                diff.lines,
-            )
-            DiffResult.TooLarge -> throw PageFailure(PageError.COMPARISON_TOO_LARGE)
-        }
+        return comparison(
+            left.copy(revision = visibleMetadata(actor, left.revision)),
+            right.copy(revision = visibleMetadata(actor, right.revision)),
+        ) ?: throw PageFailure(PageError.COMPARISON_TOO_LARGE)
     }
 
     private fun visibleMetadata(actor: PageActor, revision: RevisionMetadata): RevisionMetadata {
@@ -178,24 +182,56 @@ class PageApplicationService(private val repository: PageRepository, private val
         }
     }
 
-    @Transactional(timeout = 8)
     fun edit(actor: PageActor, requestId: UUID, command: EditPage): Page {
         requireRead(actor)
         if (actor == PageActor.ANONYMOUS && !policy.anonymousEdit) throw PageFailure(PageError.FORBIDDEN)
         val revision = revision(actor, requestId, command.source, command.summary)
-        val current = find(command.lookup).page ?: throw PageFailure(PageError.PAGE_NOT_FOUND)
-        if (actor == PageActor.ANONYMOUS && current.sourceRestricted) {
-            throw PageFailure(PageError.REVISION_SOURCE_HIDDEN)
+        val lookup = if (command.lookup is PageLookup.Title) {
+            PageLookup.Title(parseTitle(command.lookup.input).value)
+        } else command.lookup
+        val result = checkNotNull(editTransaction.execute {
+            val current = repository.lockForEdit(lookup) ?: throw PageFailure(PageError.PAGE_NOT_FOUND)
+            if (actor == PageActor.ANONYMOUS && current.sourceRestricted) {
+                throw PageFailure(PageError.REVISION_SOURCE_HIDDEN)
+            }
+            val currentBase = when (val base = command.base) {
+                is RevisionBase.Native -> base.id == current.revisionId
+                is RevisionBase.Compat -> base.id == current.compatRevisionId
+            }
+            if (currentBase) EditResult.Committed(repository.append(current, revision))
+            else captureConflict(command.base, current)
+        })
+        return when (result) {
+            is EditResult.Committed -> result.page
+            is EditResult.Conflict -> throw EditConflict(
+                result.title, result.head?.revision?.id,
+                result.base?.let { base -> result.head?.let { head -> comparison(base, head) } },
+            )
         }
-        val currentBase = when (val base = command.base) {
-            is RevisionBase.Native -> base.id == current.revisionId
-            is RevisionBase.Compat -> base.id == current.compatRevisionId
+    }
+
+    private fun captureConflict(base: RevisionBase, current: Page): EditResult.Conflict {
+        val from = when (base) {
+            is RevisionBase.Native -> RevisionLookup.Id(base.id)
+            is RevisionBase.Compat -> RevisionLookup.CompatId(base.id)
         }
-        if (!currentBase) throw PageFailure(PageError.EDIT_CONFLICT)
-        return when (val result = repository.append(current, revision)) {
-            is RevisionAppend.Committed -> result.page
-            RevisionAppend.StaleBase -> throw PageFailure(PageError.EDIT_CONFLICT)
+        val (left, right) = repository.findRevisions(from, RevisionLookup.Id(current.revisionId))
+        return EditResult.Conflict(
+            current.title,
+            left?.takeIf { it.page.id == current.id && !it.revision.sourceRestricted },
+            right?.takeUnless { it.revision.sourceRestricted },
+        )
+    }
+
+    private fun comparison(left: RevisionSource, right: RevisionSource): RevisionComparison? =
+        when (val diff = wikitextDiff.compare(left.source, right.source)) {
+            is DiffResult.Success -> RevisionComparison(left, right, diff.lines)
+            DiffResult.TooLarge -> null
         }
+
+    private sealed interface EditResult {
+        data class Committed(val page: Page) : EditResult
+        data class Conflict(val title: PageTitle, val base: RevisionSource?, val head: RevisionSource?) : EditResult
     }
 
     private fun revision(actor: PageActor, requestId: UUID, source: String, summary: String): RevisionWrite {

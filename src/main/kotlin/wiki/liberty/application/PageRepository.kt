@@ -21,7 +21,8 @@ interface PageRepository {
     fun findHistoryAnchor(page: RevisionPage, lookup: RevisionLookup): RevisionMetadata?
     fun findHistory(page: RevisionPage, window: HistoryWindow, count: Int): List<RevisionMetadata>
     fun create(page: FirstRevision): PageInsert
-    fun append(base: Page, revision: RevisionWrite): RevisionAppend
+    fun lockForEdit(lookup: PageLookup): Page?
+    fun append(base: Page, revision: RevisionWrite): Page
 }
 
 enum class HistoryDirection { OLDER, NEWER }
@@ -34,11 +35,6 @@ data class HistoryWindow(
 sealed interface PageInsert {
     data class Created(val page: Page) : PageInsert
     data object DuplicateTitle : PageInsert
-}
-
-sealed interface RevisionAppend {
-    data class Committed(val page: Page) : RevisionAppend
-    data object StaleBase : RevisionAppend
 }
 
 data class FirstRevision(

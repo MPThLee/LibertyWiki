@@ -36,3 +36,6 @@ class ComparisonRevisionMissing(val side: ComparisonSide, val lookup: RevisionLo
     PageFailure(PageError.REVISION_NOT_FOUND)
 
 data class RevisionComparison(val from: RevisionSource, val to: RevisionSource, val lines: List<DiffLine>)
+
+class EditConflict(val title: PageTitle, val currentRevisionId: UUID?, val comparison: RevisionComparison?) :
+    PageFailure(PageError.EDIT_CONFLICT)

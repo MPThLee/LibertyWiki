@@ -3,6 +3,7 @@ package wiki.liberty.adapter.api.compat.rest
 
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
+import com.fasterxml.jackson.annotation.JsonUnwrapped
 import jakarta.servlet.http.HttpServletRequest
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
@@ -23,6 +24,7 @@ import wiki.liberty.application.PageActor
 import wiki.liberty.application.PageApplicationService
 import wiki.liberty.application.RevisionBase
 import wiki.liberty.domain.ComparisonRevisionMissing
+import wiki.liberty.domain.EditConflict
 import wiki.liberty.domain.ComparisonRevisionHidden
 import wiki.liberty.domain.Page
 import wiki.liberty.domain.PageError
@@ -96,6 +98,11 @@ data class RestError(
     val messageTranslations: Map<String, String>,
     val httpCode: Int,
     val httpReason: String,
+)
+
+data class RestEditConflict(
+    @get:JsonUnwrapped val error: RestError,
+    @get:JsonUnwrapped val comparison: RestComparison?,
 )
 
 data class RestParameterError(
@@ -291,7 +298,15 @@ class MediaWikiPages(
 }
 
 @RestControllerAdvice(assignableTypes = [MediaWikiPages::class])
-class MediaWikiRestErrors {
+class MediaWikiRestErrors(private val http: PageHttp) {
+    @ExceptionHandler(EditConflict::class)
+    fun conflict(failure: EditConflict): ResponseEntity<ByteArray> {
+        val status = HttpStatus.CONFLICT
+        val error = RestError("editconflict", mapOf("en" to "Edit conflict: ${failure.title.value}"),
+            status.value(), status.reasonPhrase)
+        return http.comparisonResponse(RestEditConflict(error, failure.comparison?.restComparison()), status, error)
+    }
+
     @ExceptionHandler(RestFailure::class)
     fun transport(failure: RestFailure) = error(failure.status, failure.key, failure.message.orEmpty())
 
