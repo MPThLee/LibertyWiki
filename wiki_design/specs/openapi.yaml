@@ -1436,7 +1436,7 @@ components:
         baseRevisionId:
           type: string
           format: uuid
-          description: 사용자가 확인한 현재 리비전 ID. 저장 시 현재 판과 다르면 거부한다.
+          description: 사용자가 확인한 현재 리비전 ID. 생략할 수 있지만 명시적 null은 허용하지 않는다. 저장 시 현재 판과 다르면 거부한다.
         summary:
           type: string
           maxLength: 500

@@ -2,6 +2,8 @@
 package wiki.liberty.adapter.api.nativeapi
 
 import com.fasterxml.jackson.annotation.JsonInclude
+import com.fasterxml.jackson.annotation.JsonSetter
+import com.fasterxml.jackson.annotation.Nulls
 import jakarta.servlet.http.HttpServletRequest
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
@@ -34,7 +36,11 @@ import java.util.UUID
 
 data class NativeCreatePage(val title: String, val namespaceId: Int, val source: String, val summary: String = "")
 data class NativeEditPage(val baseRevisionId: String, val source: String, val summary: String = "")
-data class NativeUndoPage(val revisionId: String, val summary: String = "", val baseRevisionId: String? = null)
+data class NativeUndoPage(
+    val revisionId: String,
+    val summary: String = "",
+    @param:JsonSetter(nulls = Nulls.FAIL) val baseRevisionId: String? = null,
+)
 
 data class NativeSourcePage(
     val id: UUID,

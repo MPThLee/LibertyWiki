@@ -114,7 +114,7 @@ REST PUT 409의 게시판 diff는 Wikidiff2 1.10 이상에서 차이를 제공�
 
 | 경로 | 내부 시험 계약 |
 |---|---|
-| Native `POST /api/v1/pages/{pageId}/undos` | 문서 UUID와 JSON `revisionId`(UUID), 선택 `baseRevisionId`(최신 기준판 UUID) 및 `summary`. 성공은 201과 `CurrentSourcePage`. 기준판 변경·겹침·모호한 적용은 409 `EDIT_CONFLICT`, 부모 없는 최초 판은 409 `UNDO_NO_PARENT`, 병합 처리 한도 초과는 422 `UNDO_TOO_LARGE`. 다른 문서의 ID와 누락된 리비전은 404 `REVISION_NOT_FOUND`. 읽기·편집 정책 거부는 403 `FORBIDDEN`, 원문의 제한으로 거부된 경우는 403 `REVISION_SOURCE_HIDDEN`. [Native OpenAPI](../specs/openapi.yaml) |
+| Native `POST /api/v1/pages/{pageId}/undos` | 문서 UUID와 JSON `revisionId`(UUID), 선택 `baseRevisionId`(최신 기준판 UUID) 및 `summary`. `baseRevisionId` 생략은 허용하지만 명시적 `null`은 400 `INVALID_BODY`로 거부한다. 성공은 201과 `CurrentSourcePage`. 기준판 변경·겹침·모호한 적용은 409 `EDIT_CONFLICT`, 부모 없는 최초 판은 409 `UNDO_NO_PARENT`, 병합 처리 한도 초과는 422 `UNDO_TOO_LARGE`. 다른 문서의 ID와 누락된 리비전은 404 `REVISION_NOT_FOUND`. 읽기·편집 정책 거부는 403 `FORBIDDEN`, 원문의 제한으로 거부된 경우는 403 `REVISION_SOURCE_HIDDEN`. [Native OpenAPI](../specs/openapi.yaml) |
 | MediaWiki Action 폼 `POST /w/api.php` | `action=edit`, `title` 또는 숫자 `pageid`, `undo`(양의 숫자 리비전 ID), CSRF `token`, 선택 `baserevid`(최신 기준판 숫자 ID) 및 `summary`. 제공된 `text`보다 서버에서 계산한 취소 원문을 우선한다. 성공은 `edit.result=Success`, `oldrevid`, `newrevid`. 최초 판·누락은 `nosuchrevid`, 다른 문서의 공개 판은 `revwrongpage`, 본문 제한은 `missingcontent`, 쓰기 정책 거부는 `permissiondenied`, 기준판 변경은 `editconflict`를 HTTP 200 오류로 반환한다. 겹치거나 모호한 역적용 및 병합 한도 초과는 `undofailure`다. [Action Edit](https://www.mediawiki.org/wiki/API:Edit) |
 | MediaWiki REST | 공식 참조에 독립적인 Undo 경로가 없다. `PUT /w/rest.php/v1/page/{title}`는 클라이언트가 보내는 원문으로 문서를 편집하는 경로다. [REST API Reference](https://www.mediawiki.org/wiki/API:REST_API/Reference) |
 

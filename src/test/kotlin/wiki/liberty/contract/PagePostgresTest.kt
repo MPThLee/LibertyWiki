@@ -641,6 +641,32 @@ class PagePostgresTest {
     }
 
     @Test
+    fun `native undo rejects explicit null base without changing page or records`() {
+        val initial = http.nativeCreate("Undo-null-${UUID.randomUUID()}", source).json
+        val path = "$native/${initial["id"].asText()}"
+        val edited = http.postJson("$path/revisions", mapOf(
+            "baseRevisionId" to initial["currentRevisionId"].asText(), "source" to "Changed",
+        ), operatorToken)
+        assertThat(edited.status).isEqualTo(201)
+        val head = edited.json["currentRevisionId"].asText()
+        val body = mapOf("revisionId" to head, "baseRevisionId" to null)
+        val contract = spec.at("$undoOperation/requestBody/content/application~1json/schema")
+        validateSchema(contract, yaml.valueToTree(body - "baseRevisionId"))
+        val schema = yaml.createObjectNode()
+        schema.set<JsonNode>("components", spec["components"])
+        schema.set<JsonNode>("allOf", yaml.createArrayNode().add(contract))
+        assertThat(schemaFactory.getSchema(schema).validate(yaml.valueToTree(body))).isNotEmpty()
+        val before = rowCounts()
+
+        val response = http.postJson("$path/undos", body, operatorToken)
+        assertThat(response.status).isEqualTo(400)
+        assertThat(response.json["code"].asText()).isEqualTo("INVALID_BODY")
+        assertSchema("$undoOperation/responses/400", response.json)
+        assertThat(http.get(path, operatorToken).json["currentRevisionId"].asText()).isEqualTo(head)
+        assertThat(rowCounts()).isEqualTo(before)
+    }
+
+    @Test
     fun `both undo surfaces append restored source with one audit and outbox record`() {
         val title = "Undo-${UUID.randomUUID()}"
         val initial = http.nativeCreate(title, source).json
