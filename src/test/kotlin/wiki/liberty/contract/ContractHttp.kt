@@ -82,6 +82,14 @@ internal class ContractHttp(private val base: String, private val scriptPath: St
         return send("$scriptPath/api.php", body, "application/x-www-form-urlencoded", auth)
     }
 
+    fun actionUndo(
+        key: Pair<String, String>, revision: Long, auth: String? = null, summary: String? = null, token: String = csrfToken,
+    ): Result {
+        val params = mutableMapOf("action" to "edit", key, "undo" to revision.toString(), "token" to token)
+        if (summary != null) params["summary"] = summary
+        return send("$scriptPath/api.php", form(params), "application/x-www-form-urlencoded", auth)
+    }
+
     fun postJson(path: String, body: Any, auth: String? = null) =
         send(path, mapper.writeValueAsString(body), "application/json", auth)
 

@@ -16,6 +16,7 @@ import wiki.liberty.application.HistoryRequest
 import wiki.liberty.application.PageActor
 import wiki.liberty.application.PageApplicationService
 import wiki.liberty.application.RevisionBase
+import wiki.liberty.application.UndoPage
 import wiki.liberty.domain.ComparisonRevisionMissing
 import wiki.liberty.domain.EditConflict
 import wiki.liberty.domain.ComparisonRevisionHidden
@@ -111,7 +112,10 @@ class MediaWikiAction(private val pages: PageApplicationService, private val htt
             request.queryString != null
         ) unsupported("Send edit parameters in an application/x-www-form-urlencoded POST body.")
         val create = params.get("createonly") != null
-        if (create) {
+        val undo = params.get("undo")
+        if (undo != null) {
+            params.only("title", "pageid", "undo", "text", "token", "summary", "nocreate")
+        } else if (create) {
             params.only("title", "text", "token", "summary", "createonly")
         } else {
             params.only("title", "pageid", "text", "token", "summary", "baserevid", "nocreate")
@@ -119,14 +123,18 @@ class MediaWikiAction(private val pages: PageApplicationService, private val htt
         if (params.required("token") != "+\\" || request.getHeader("Sec-Fetch-Site") == "cross-site") {
             throw ActionFailure("badtoken", "Invalid CSRF token.")
         }
-        val text = params.required("text")
         val summary = params.get("summary").orEmpty()
-        val page = if (create) {
-            pages.create(actor, request.requestId(), CreatePage(params.required("title"), 0, text, summary))
+        val page = if (undo != null) {
+            pages.undo(actor, request.requestId(), UndoPage(
+                lookup(params.get("title"), params.get("pageid")),
+                RevisionLookup.CompatId(positiveInteger(undo, "undo")), summary,
+            ))
+        } else if (create) {
+            pages.create(actor, request.requestId(), CreatePage(params.required("title"), 0, params.required("text"), summary))
         } else {
             val lookup = lookup(params.get("title"), params.get("pageid"))
             val base = RevisionBase.Compat(positiveInteger(params.required("baserevid"), "baserevid"))
-            pages.edit(actor, request.requestId(), EditPage(lookup, base, text, summary))
+            pages.edit(actor, request.requestId(), EditPage(lookup, base, params.required("text"), summary))
         }
         return mapOf("edit" to buildMap {
             if (create) put("new", true)
@@ -333,6 +341,10 @@ class MediaWikiActionErrors {
             error("nosuchpageid", "There is no page with the specified ID.")
         }
         PageError.EDIT_CONFLICT -> error("editconflict", "Edit conflict.")
+        PageError.UNDO_NO_PARENT -> error("nosuchrevid", "There is no revision with ID .")
+        PageError.UNDO_WRONG_PAGE -> error("revwrongpage", request.getParameter("title")?.let {
+            "r${request.getParameter("undo")} is not a revision of $it."
+        } ?: "The revision does not belong to the specified page.")
         PageError.INVALID_CURSOR -> error("badcontinue", "Invalid revision continuation.")
         PageError.FORBIDDEN -> if (request.getParameter("action") == "edit") {
             error("permissiondenied", "The page operation is forbidden.")
@@ -342,7 +354,9 @@ class MediaWikiActionErrors {
         PageError.INVALID_TITLE -> error("invalidtitle", "The title is invalid.")
         PageError.REVISION_NOT_FOUND -> {
             val revision = (failure as? ComparisonRevisionMissing)?.lookup as? RevisionLookup.CompatId
-            if (revision == null) error("nosuchrevid", "The revision does not exist.")
+            val undo = request.getParameter("undo")
+            if (undo != null) error("nosuchrevid", "There is no revision with ID $undo.")
+            else if (revision == null) error("nosuchrevid", "The revision does not exist.")
             else error("nosuchrevid", "There is no revision with ID ${revision.value}.")
         }
         PageError.REVISION_SOURCE_HIDDEN -> {
@@ -363,6 +377,8 @@ class MediaWikiActionErrors {
     private fun setCompareErrorHeader(
         request: HttpServletRequest, response: HttpServletResponse, envelope: ActionErrorEnvelope,
     ) {
-        if (request.getParameter("action") == "compare") response.setHeader("MediaWiki-API-Error", envelope.error.code)
+        if (request.getParameter("action") == "compare" || request.getParameter("undo") != null) {
+            response.setHeader("MediaWiki-API-Error", envelope.error.code)
+        }
     }
 }

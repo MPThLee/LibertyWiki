@@ -40,6 +40,7 @@ data class PagePolicy(
 
 data class CreatePage(val title: String, val namespaceId: Int, val source: String, val summary: String)
 data class EditPage(val lookup: PageLookup, val base: RevisionBase, val source: String, val summary: String)
+data class UndoPage(val lookup: PageLookup, val target: RevisionLookup, val summary: String)
 sealed interface RevisionBase {
     data class Native(val id: UUID) : RevisionBase
     data class Compat(val id: Long) : RevisionBase
@@ -183,17 +184,10 @@ class PageApplicationService(
     }
 
     fun edit(actor: PageActor, requestId: UUID, command: EditPage): Page {
-        requireRead(actor)
-        if (actor == PageActor.ANONYMOUS && !policy.anonymousEdit) throw PageFailure(PageError.FORBIDDEN)
+        requireEdit(actor)
         val revision = revision(actor, requestId, command.source, command.summary)
-        val lookup = if (command.lookup is PageLookup.Title) {
-            PageLookup.Title(parseTitle(command.lookup.input).value)
-        } else command.lookup
         val result = checkNotNull(editTransaction.execute {
-            val current = repository.lockForEdit(lookup) ?: throw PageFailure(PageError.PAGE_NOT_FOUND)
-            if (actor == PageActor.ANONYMOUS && current.sourceRestricted) {
-                throw PageFailure(PageError.REVISION_SOURCE_HIDDEN)
-            }
+            val current = lockEditablePage(actor, command.lookup)
             val currentBase = when (val base = command.base) {
                 is RevisionBase.Native -> base.id == current.revisionId
                 is RevisionBase.Compat -> base.id == current.compatRevisionId
@@ -208,6 +202,39 @@ class PageApplicationService(
                 result.base?.let { base -> result.head?.let { head -> comparison(base, head) } },
             )
         }
+    }
+
+    @Transactional(timeout = 8)
+    fun undo(actor: PageActor, requestId: UUID, command: UndoPage): Page {
+        requireEdit(actor)
+        val current = lockEditablePage(actor, command.lookup)
+        val target = repository.findRevision(command.target) ?: throw PageFailure(PageError.REVISION_NOT_FOUND)
+        if (actor == PageActor.ANONYMOUS && target.revision.sourceRestricted) {
+            val error = if (target.page.id == current.id) PageError.REVISION_SOURCE_HIDDEN else PageError.REVISION_NOT_FOUND
+            throw PageFailure(error)
+        }
+        if (target.page.id != current.id) throw PageFailure(PageError.UNDO_WRONG_PAGE)
+        if (target.revision.id != current.revisionId) throw PageFailure(PageError.EDIT_CONFLICT)
+        val parentId = target.revision.parentId ?: throw PageFailure(PageError.UNDO_NO_PARENT)
+        val parent = repository.findRevision(RevisionLookup.Id(parentId))
+            ?: throw PageFailure(PageError.REVISION_NOT_FOUND)
+        // Undo creates a public revision, so it must never copy restricted source.
+        if (parent.revision.sourceRestricted) throw PageFailure(PageError.REVISION_SOURCE_HIDDEN)
+        return repository.append(current, revision(actor, requestId, parent.source, command.summary))
+    }
+
+    private fun requireEdit(actor: PageActor) {
+        requireRead(actor)
+        if (actor == PageActor.ANONYMOUS && !policy.anonymousEdit) throw PageFailure(PageError.FORBIDDEN)
+    }
+
+    private fun lockEditablePage(actor: PageActor, lookup: PageLookup): Page {
+        val normalized = if (lookup is PageLookup.Title) PageLookup.Title(parseTitle(lookup.input).value) else lookup
+        val current = repository.lockForEdit(normalized) ?: throw PageFailure(PageError.PAGE_NOT_FOUND)
+        if (actor == PageActor.ANONYMOUS && current.sourceRestricted) {
+            throw PageFailure(PageError.REVISION_SOURCE_HIDDEN)
+        }
+        return current
     }
 
     private fun captureConflict(base: RevisionBase, current: Page): EditResult.Conflict {

@@ -640,6 +640,136 @@ class PagePostgresTest {
         }
     }
 
+    @Test
+    fun `both undo surfaces append restored source with one audit and outbox record`() {
+        val title = "Undo-${UUID.randomUUID()}"
+        val initial = http.nativeCreate(title, source).json
+        val pageId = initial["id"].asText()
+        val parent = initial["currentRevisionId"].asText()
+        val path = "$native/$pageId"
+        val edit = http.postJson("$path/revisions", mapOf("baseRevisionId" to parent, "source" to "Changed"), operatorToken)
+        assertThat(edit.status).isEqualTo(201)
+        val target = edit.json["currentRevisionId"].asText()
+        val compat = http.restRead(title, operatorToken).json
+        val compatTarget = compat.at("/latest/id").asLong()
+        val before = rowCounts()
+        val body = mapOf("revisionId" to target, "summary" to "Restore source")
+        validateSchema(spec.at("$undoOperation/requestBody/content/application~1json/schema"), yaml.valueToTree(body))
+        val nativeUndo = http.postJson("$path/undos", body, operatorToken)
+        assertThat(nativeUndo.status).isEqualTo(201)
+        assertSchema("$undoOperation/responses/201", nativeUndo.json)
+        assertThat(nativeUndo.json["source"].asText()).isEqualTo(source)
+        val restored = nativeUndo.json["currentRevisionId"].asText()
+        val compatRestored = http.restRead(title, operatorToken).json.at("/latest/id").asLong()
+        assertThat(compatRestored).isGreaterThan(compatTarget)
+        val actionUndo = http.actionUndo("pageid" to compat["id"].asText(), compatRestored, operatorToken, "Undo restoration")
+        assertThat(actionUndo.json.at("/edit/result").asText()).isEqualTo("Success")
+        assertThat(actionUndo.json.at("/edit/oldrevid").asLong()).isEqualTo(compatRestored)
+        val current = http.get(path, operatorToken).json
+        val currentId = current["currentRevisionId"].asText()
+        assertThat(current["source"].asText()).isEqualTo("Changed")
+        assertThat(http.restRead(title, operatorToken).json.at("/latest/id").asLong())
+            .isEqualTo(actionUndo.json.at("/edit/newrevid").asLong())
+        val history = http.get("$path/revisions", operatorToken).json["revisions"]
+        assertThat(history.map { it["id"].asText() }).containsExactly(currentId, restored, target, parent)
+        assertThat(history.take(3).map { it["parentRevisionId"].asText() }).containsExactly(restored, target, parent)
+        assertThat(history.take(2).map { it["summary"].asText() }).containsExactly("Undo restoration", "Restore source")
+        assertThat(http.get("/api/v1/revisions/$parent", operatorToken).json["source"].asText()).isEqualTo(source)
+        assertThat(http.get("/api/v1/revisions/$target", operatorToken).json["source"].asText()).isEqualTo("Changed")
+        for ((id, request) in listOf(restored to nativeUndo, currentId to actionUndo)) {
+            val row = jdbc.queryForMap(
+                """
+                SELECT a.event_type, a.request_id, a.actor, o.actor AS outbox_actor
+                FROM wiki_audit a JOIN wiki_outbox o ON a.page_id = o.page_id AND a.revision_id = o.revision_id
+                    AND a.request_id = o.request_id AND a.event_type = o.event_type
+                WHERE a.revision_id = ?
+                """.trimIndent(), UUID.fromString(id),
+            )
+            assertThat(row["event_type"]).isEqualTo("revision.committed")
+            assertThat(row["request_id"].toString()).isEqualTo(request.header("X-Request-Id"))
+            assertThat(listOf(row["actor"], row["outbox_actor"])).containsOnly("operator")
+        }
+        assertThat(rowCounts()).containsExactly(before[0], before[1] + 2, before[2] + 2, before[3] + 2)
+    }
+
+    @Test
+    fun `undo rejects first foreign missing and stale targets and rolls back failed outbox writes`() {
+        val title = "Undo-rejections-${UUID.randomUUID()}"
+        val initial = http.nativeCreate(title, source).json
+        val first = initial["currentRevisionId"].asText()
+        val firstCompat = http.restRead(title, operatorToken).json.at("/latest/id").asLong()
+        val path = "$native/${initial["id"].asText()}"
+        fun undo(id: String) = http.postJson("$path/undos", mapOf("revisionId" to id), operatorToken)
+        fun rejected(id: String, status: Int, code: String) {
+            val response = undo(id)
+            assertThat(response.status).isEqualTo(status)
+            assertThat(response.json["code"].asText()).isEqualTo(code)
+            assertSchema("$undoOperation/responses/$status", response.json)
+        }
+        fun actionUndo(id: Long) = http.actionUndo("title" to title, id, operatorToken)
+        val beforeFirst = rowCounts()
+        rejected(first, 409, "UNDO_NO_PARENT")
+        assertThat(actionUndo(firstCompat).json.at("/error/code").asText()).isEqualTo("nosuchrevid")
+        assertThat(rowCounts()).isEqualTo(beforeFirst)
+
+        val foreign = "Undo-foreign-${UUID.randomUUID()}"
+        http.nativeCreate(foreign, "Another page")
+        val otherFirst = http.restRead(foreign, operatorToken).json.at("/latest/id").asLong()
+        val otherHead = http.restEdit(foreign, "Another edit", otherFirst, auth = operatorToken).json.at("/latest/id").asLong()
+        val foreignId = http.get("$native/by-title/$foreign", operatorToken).json["currentRevisionId"].asText()
+        val edited = http.postJson("$path/revisions", mapOf("baseRevisionId" to first, "source" to "Keep"), operatorToken).json
+        val head = edited["currentRevisionId"].asText()
+        val compatHead = http.restRead(title, operatorToken).json.at("/latest/id").asLong()
+        val before = rowCounts()
+        rejected(foreignId, 404, "REVISION_NOT_FOUND")
+        rejected(UUID.randomUUID().toString(), 404, "REVISION_NOT_FOUND")
+        rejected(first, 409, "EDIT_CONFLICT")
+        assertThat(actionUndo(otherHead).json.at("/error/code").asText()).isEqualTo("revwrongpage")
+        assertThat(actionUndo(Long.MAX_VALUE).json.at("/error/code").asText()).isEqualTo("nosuchrevid")
+        assertThat(actionUndo(firstCompat).json.at("/error/code").asText()).isEqualTo("editconflict")
+        val badToken = http.actionUndo("title" to title, compatHead, operatorToken, token = "invalid")
+        assertThat(badToken.json.at("/error/code").asText()).isEqualTo("badtoken")
+
+        jdbc.execute("ALTER TABLE wiki_outbox ADD CONSTRAINT contract_reject_undo_outbox CHECK (false) NOT VALID")
+        try {
+            assertThat(undo(head).status).isEqualTo(500)
+            assertThat(actionUndo(compatHead).status).isEqualTo(500)
+        } finally {
+            jdbc.execute("ALTER TABLE wiki_outbox DROP CONSTRAINT contract_reject_undo_outbox")
+        }
+        assertThat(http.get(path, operatorToken).json).isEqualTo(edited)
+        assertThat(rowCounts()).isEqualTo(before)
+    }
+
+    @Test
+    fun `native and action undo race a normal edit under the same page lock`() {
+        val title = "Undo-race-${UUID.randomUUID()}"
+        val initial = http.nativeCreate(title, source).json
+        val path = "$native/${initial["id"].asText()}"
+        val updated = http.postJson("$path/revisions",
+            mapOf("baseRevisionId" to initial["currentRevisionId"].asText(), "source" to "Changed"), operatorToken).json
+        val target = updated["currentRevisionId"].asText()
+        val compatTarget = http.restRead(title, operatorToken).json.at("/latest/id").asLong()
+        val before = rowCounts()
+        val calls = listOf(
+            { http.postJson("$path/undos", mapOf("revisionId" to target), operatorToken) },
+            { http.actionUndo("title" to title, compatTarget, operatorToken) },
+            { http.restEdit(title, "Competing edit", compatTarget, auth = operatorToken) },
+        )
+        val barrier = CyclicBarrier(calls.size)
+        val (nativeUndo, actionUndo, edit) = Executors.newFixedThreadPool(calls.size).use { executor ->
+            executor.invokeAll(calls.map { call -> Callable { barrier.await(); call() } }).map { it.get() }
+        }
+        val wins = listOf(nativeUndo.status == 201, actionUndo.json.has("edit"), edit.status == 200)
+        assertThat(wins.count { it }).isEqualTo(1)
+        if (!wins[0]) assertThat(nativeUndo.json["code"].asText()).isEqualTo("EDIT_CONFLICT")
+        if (!wins[1]) assertThat(actionUndo.json.at("/error/code").asText()).isEqualTo("editconflict")
+        if (!wins[2]) assertThat(edit.status).isEqualTo(409)
+        assertThat(http.get(path, operatorToken).json["source"].asText())
+            .isEqualTo(if (wins[2]) "Competing edit" else source)
+        assertThat(rowCounts()).containsExactly(before[0], before[1] + 1, before[2] + 1, before[3] + 1)
+    }
+
     private fun assertState(title: String, nativePage: JsonNode, requestId: String) {
         val rows = jdbc.queryForList(
             """
@@ -693,6 +823,7 @@ class PagePostgresTest {
     }
 
     companion object {
+        private const val undoOperation = "/paths/~1pages~1{pageId}~1undos/post"
         private val yaml = ObjectMapper(YAMLFactory())
         private val spec = yaml.readTree(File("wiki_design/specs/openapi.yaml"))
         private val schemaFactory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012)

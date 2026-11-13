@@ -85,6 +85,26 @@ class PageEditDeniedTest {
         assertThat(counts()).isEqualTo(before)
     }
 
+    @Test
+    fun `anonymous readers cannot undo through native or action`() {
+        val http = ContractHttp("http://127.0.0.1:$port")
+        val title = "Undo-read-only-${UUID.randomUUID()}"
+        val page = http.nativeCreate(title, "Parent source").json
+        val path = "/api/v1/pages/${page["id"].asText()}"
+        val edit = http.postJson("$path/revisions",
+            mapOf("baseRevisionId" to page["currentRevisionId"].asText(), "source" to "New source"), operatorToken)
+        assertThat(edit.status).isEqualTo(201)
+        val edited = edit.json
+        val target = http.restRead(title).json.at("/latest/id").asLong()
+        val before = counts()
+        val native = http.postJson("$path/undos", mapOf("revisionId" to edited["currentRevisionId"].asText()))
+        assertThat(native.status).isEqualTo(403)
+        assertThat(native.json["code"].asText()).isEqualTo("FORBIDDEN")
+        assertThat(http.actionUndo("title" to title, target).json.at("/error/code").asText()).isEqualTo("permissiondenied")
+        assertThat(http.get(path).json).isEqualTo(edited)
+        assertThat(counts()).isEqualTo(before)
+    }
+
     private fun counts() = listOf("wiki_revision", "wiki_audit", "wiki_outbox").map { table ->
         jdbc.queryForObject("SELECT count(*) FROM $table", Long::class.javaObjectType)
     }

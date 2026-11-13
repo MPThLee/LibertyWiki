@@ -46,7 +46,7 @@ MediaWiki 1.46.2의 코어와 해당 배포판에 동봉되는 기본 확장의 
 | `12_EXTENSION_PLATFORM.md` | 런타임 확장 프레임워크 및 SPI |
 | `13_LICENSE_CLEANROOM.md` | AGPL·클린룸 개발·의존성 정책 |
 | `14_DUAL_API_CONTRACT.md` | **두 API 계열 동시 제공·지속 동기화·버전별 증분 업데이트** |
-| `15_PAGE_SOURCE_SLICE.md` | PostgreSQL 내부 시험용 문서 생성·원문 조회·편집·이력 계약과 호환성 범위 |
+| `15_PAGE_SOURCE_SLICE.md` | PostgreSQL 내부 시험용 문서 생성·원문 조회·편집·이력·비교·취소 계약과 호환성 범위 |
 | `16_USER_REQUIREMENT_TRACEABILITY.md` | 사용자 제안·구현 이슈·승인 결정에서 PRD·SRS로 이어지는 요구 근거와 이전 수용 기준 |
 | `../../docs/adr/` | 기존 결정을 대체하는 2026-11-08 승인 결정 |
 | `../specs/release_profile_1_0.json` | 1.0 규모·DB·CPU·성능·운영·이전 요구 프로파일(미실행) |

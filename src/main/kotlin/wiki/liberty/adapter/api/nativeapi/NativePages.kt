@@ -18,6 +18,7 @@ import wiki.liberty.application.HistoryRequest
 import wiki.liberty.application.PageActor
 import wiki.liberty.application.PageApplicationService
 import wiki.liberty.application.RevisionBase
+import wiki.liberty.application.UndoPage
 import wiki.liberty.domain.EditConflict
 import wiki.liberty.domain.Page
 import wiki.liberty.domain.PageError
@@ -33,6 +34,7 @@ import java.util.UUID
 
 data class NativeCreatePage(val title: String, val namespaceId: Int, val source: String, val summary: String = "")
 data class NativeEditPage(val baseRevisionId: String, val source: String, val summary: String = "")
+data class NativeUndoPage(val revisionId: String, val summary: String = "")
 
 data class NativeSourcePage(
     val id: UUID,
@@ -122,6 +124,21 @@ class NativePages(private val pages: PageApplicationService, private val http: P
             body.source, body.summary,
         )
         return pages.edit(actor, request.requestId(), command).native()
+    }
+
+    @PostMapping("/pages/{pageId}/undos")
+    @ResponseStatus(HttpStatus.CREATED)
+    fun undo(
+        @PathVariable pageId: String, @RequestBody body: NativeUndoPage, request: HttpServletRequest,
+    ): NativeSourcePage {
+        requireJson(request)
+        val actor = http.actor(request)
+        pages.requireRead(actor)
+        val command = UndoPage(
+            PageLookup.Id(parseId(pageId)), RevisionLookup.Id(parseId(body.revisionId, NativeIdKind.REVISION)),
+            body.summary,
+        )
+        return pages.undo(actor, request.requestId(), command).native()
     }
 
     @GetMapping("/pages/{pageId}/revisions")
@@ -226,8 +243,8 @@ class NativePageErrors(private val http: PageHttp) {
     fun domain(failure: PageFailure, request: HttpServletRequest): ResponseEntity<NativeError> {
         val status = when (failure.error) {
             PageError.FORBIDDEN, PageError.REVISION_SOURCE_HIDDEN -> HttpStatus.FORBIDDEN
-            PageError.EXISTS, PageError.EDIT_CONFLICT -> HttpStatus.CONFLICT
-            PageError.PAGE_NOT_FOUND, PageError.REVISION_NOT_FOUND -> HttpStatus.NOT_FOUND
+            PageError.EXISTS, PageError.EDIT_CONFLICT, PageError.UNDO_NO_PARENT -> HttpStatus.CONFLICT
+            PageError.PAGE_NOT_FOUND, PageError.REVISION_NOT_FOUND, PageError.UNDO_WRONG_PAGE -> HttpStatus.NOT_FOUND
             PageError.INVALID_CURSOR, PageError.INVALID_LIMIT, PageError.REVISION_PAGE_MISMATCH -> HttpStatus.BAD_REQUEST
             else -> HttpStatus.UNPROCESSABLE_ENTITY
         }
@@ -235,8 +252,9 @@ class NativePageErrors(private val http: PageHttp) {
             PageError.FORBIDDEN -> "The page operation is forbidden."
             PageError.EXISTS -> "A page with this title already exists."
             PageError.EDIT_CONFLICT -> "The page has changed since the base revision."
+            PageError.UNDO_NO_PARENT -> "The first revision cannot be undone."
             PageError.PAGE_NOT_FOUND -> "Page not found."
-            PageError.REVISION_NOT_FOUND -> "Revision not found."
+            PageError.REVISION_NOT_FOUND, PageError.UNDO_WRONG_PAGE -> "Revision not found."
             PageError.REVISION_SOURCE_HIDDEN -> "The revision source is restricted."
             PageError.REVISION_PAGE_MISMATCH -> "Both revisions must belong to the same page."
             PageError.COMPARISON_TOO_LARGE -> "The revision comparison exceeds the processing or output limit."
@@ -247,7 +265,8 @@ class NativePageErrors(private val http: PageHttp) {
             PageError.INVALID_SOURCE -> "Source must be valid Unicode and at most 1 MiB in UTF-8."
             PageError.INVALID_SUMMARY -> "Summary must be valid Unicode and at most 500 characters."
         }
-        return error(status, failure.error.name, message, request)
+        val code = if (failure.error == PageError.UNDO_WRONG_PAGE) PageError.REVISION_NOT_FOUND else failure.error
+        return error(status, code.name, message, request)
     }
 
     @ExceptionHandler(NativePageMissing::class)
@@ -265,7 +284,7 @@ class NativePageErrors(private val http: PageHttp) {
 
     @ExceptionHandler(HttpMessageNotReadableException::class)
     fun invalidBody(request: HttpServletRequest) =
-        error(HttpStatus.BAD_REQUEST, "INVALID_BODY", "Expected a valid JSON page creation request.", request)
+        error(HttpStatus.BAD_REQUEST, "INVALID_BODY", "Expected a valid JSON request body.", request)
 
     @ExceptionHandler(HttpMediaTypeNotSupportedException::class)
     fun invalidMediaType(request: HttpServletRequest) =

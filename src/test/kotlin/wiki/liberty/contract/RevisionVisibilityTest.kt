@@ -108,6 +108,50 @@ class RevisionVisibilityTest {
         assertThat(counts()).containsExactlyElementsOf(before.dropLast(1) + (before.last()!! + 1))
     }
 
+    @Test
+    fun `undo cannot publish restricted parent source and anonymous callers cannot undo a restricted head`() {
+        val http = ContractHttp("http://127.0.0.1:$port")
+        val title = "Undo-restricted-${UUID.randomUUID()}"
+        val page = http.nativeCreate(title, "Parent source").json
+        val path = "/api/v1/pages/${page["id"].asText()}"
+        val parent = page["currentRevisionId"].asText()
+        val edited = http.postJson("$path/revisions",
+            mapOf("baseRevisionId" to parent, "source" to "New source"), operatorToken).json
+        val head = edited["currentRevisionId"].asText()
+        val compat = http.restRead(title).json.at("/latest/id").asLong()
+        fun restrict(id: String) = jdbc.update(
+            "INSERT INTO wiki_revision_source_restriction (revision_id) VALUES (?)", UUID.fromString(id),
+        )
+        fun denied(auth: String?) {
+            val native = http.postJson("$path/undos", mapOf("revisionId" to head), auth)
+            assertThat(native.status).isEqualTo(403)
+            assertThat(native.json["code"].asText()).isEqualTo("REVISION_SOURCE_HIDDEN")
+            val action = http.actionUndo("title" to title, compat, auth)
+            assertThat(action.json.at("/error/code").asText()).isEqualTo("missingcontent")
+            assertThat(listOf(native.json.toString(), action.json.toString())).noneMatch {
+                it.contains("Parent source") || it.contains("New source")
+            }
+        }
+
+        restrict(parent)
+        val restrictedParentState = counts()
+        denied(null)
+        denied(operatorToken)
+        assertThat(counts()).isEqualTo(restrictedParentState)
+        assertThat(http.get(path, operatorToken).json).isEqualTo(edited)
+
+        jdbc.update("DELETE FROM wiki_revision_source_restriction WHERE revision_id = ?", UUID.fromString(parent))
+        restrict(head)
+        val restrictedHeadState = counts()
+        denied(null)
+        assertThat(counts()).isEqualTo(restrictedHeadState)
+        assertThat(http.get(path, operatorToken).json).isEqualTo(edited)
+        val restored = http.postJson("$path/undos", mapOf("revisionId" to head), operatorToken)
+        assertThat(restored.status).isEqualTo(201)
+        assertThat(http.get(path).json["source"].asText()).isEqualTo("Parent source")
+        assertThat(http.get("/api/v1/revisions/$head").status).isEqualTo(403)
+    }
+
     private fun counts() = listOf("wiki_page", "wiki_revision", "wiki_audit", "wiki_outbox", "wiki_revision_source_restriction")
         .map { jdbc.queryForObject("SELECT count(*) FROM $it", Long::class.javaObjectType) }
 

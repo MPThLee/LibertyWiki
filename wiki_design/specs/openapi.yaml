@@ -594,29 +594,58 @@ paths:
     post:
       tags:
       - Revisions
-      summary: CAP-REVISION-UNDO
+      summary: 최신 리비전 한 건 취소
       operationId: undoRevision
+      description: >-
+        내부 시험용 일반 이름공간 Wikitext의 최신 편집 취소. read와 edit 권한이
+        필요하다. 요청 리비전이 문서의 현재 리비전이고 부모 원문이 공개된 경우,
+        부모 원문을 현재 리비전의 새 자식으로 저장한다. 같은 리비전 ID로 재요청할 때
+        앞선 요청이 성공했다면 409가 반환된다. 응답을 받지 못하면 현재 문서를 다시
+        조회하여 결과를 확인할 수 있다.
+      security:
+      - bearerAuth: []
+      - {}
       parameters:
-      - name: pageId
-        in: path
-        required: true
-        schema:
-          type: string
+      - $ref: '#/components/parameters/PageId'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              additionalProperties: true
+              $ref: '#/components/schemas/UndoRevisionRequest'
       responses:
-        '200':
-          description: '계약 설계 초안: 정상 결과 스키마 상세화 필요'
-        '401': *id001
-        '403': *id002
-        '404': *id003
-        '409': *id004
-        '422': *id005
+        '201':
+          description: 부모 원문을 담은 새 리비전과 현재 문서
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentSourcePage'
+        '400':
+          $ref: '#/components/responses/Invalid'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: FORBIDDEN 또는 REVISION_SOURCE_HIDDEN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: PAGE_NOT_FOUND 또는 REVISION_NOT_FOUND. 다른 문서의 리비전 ID도 REVISION_NOT_FOUND를 반환한다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 최신 리비전이 바뀐 경우 EDIT_CONFLICT. 첫 리비전에는 UNDO_NO_PARENT.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/Invalid'
   /watchlist/pages/{pageId}:
     put:
       tags:
@@ -1390,6 +1419,19 @@ components:
         summary:
           type: string
           maxLength: 500
+    UndoRevisionRequest:
+      type: object
+      additionalProperties: false
+      required: [revisionId]
+      properties:
+        revisionId:
+          type: string
+          format: uuid
+          description: 취소할 현재 리비전 ID
+        summary:
+          type: string
+          maxLength: 500
+          default: ''
     EditConflict:
       type: object
       additionalProperties: false

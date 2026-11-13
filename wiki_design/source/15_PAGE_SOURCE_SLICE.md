@@ -1,4 +1,4 @@
-# 15. 내부 시험용 문서 생성·원문 조회·편집·이력·비교
+# 15. 내부 시험용 문서 생성·원문 조회·편집·이력·비교·취소
 
 영어 첫 글자 대문자 규칙을 사용하는 일반 이름공간(0)의 Wikitext를 제목으로 생성하고, 제목·ID로 현재 revision을 조회하고, 현재 revision을 기준으로 기존 문서의 원문 전체를 편집한다. 넘겨주기 지시문도 입력한 원문 그대로 반환한다. 생성과 조회는 FR-PAGE-001/002, FR-NS-003 및 CAP-PAGE-CREATE, CAP-PAGE-READ, CAP-PAGE-READ-TITLE에 해당한다. 편집은 FR-EDIT-001/002/003 및 CAP-REVISION-COMMIT의 일부를 제공한다. 렌더링, 삭제, 보호, 이름공간 설정과 세션 인증은 후속 범위다.
 
@@ -103,6 +103,22 @@ REST PUT 409의 게시판 diff는 Wikidiff2 1.10 이상에서 차이를 제공�
 - 비교 `compat_gap`은 Action 교차 문서, 제목·페이지 ID·상대 리비전·임시 원문·슬롯 지정, `inline`/`unified` 및 추가 메타데이터, 입력 검증·경고·캐시의 전체 응답 계약이다. MediaWiki에서는 Action이 교차 문서를 허용하고 REST가 거부한다.
 - Wikidiff2의 줄 대응·단어 단위 강조·이동 문단(종류 4/5)·일부 제목과 줄바꿈 경계는 추가 차등 검증 대상이다. 본문 제한의 관리 API·UI, 작성자와 요약의 개별 숨김, 리비전 억제 권한, 누락과 숨김이 동시에 발생할 때 Action의 오류 우선순위는 후속 범위다.
 - 비교 시험은 PostgreSQL 17의 UUID·숫자 ID 매핑, 권한·누락·소속·크기 오류, 문서·리비전·감사·outbox 보존, Native 스키마와 브라우저 이력 탐색을 검증한다. MariaDB 11.8, SQL Server 2022, Oracle 19c는 두 판의 Unicode 원문·가시성 및 상태 동등성 검증이 남아 있다. 공개 API 호환성 상태는 `INCOMPLETE`다.
+
+## 최신 편집 한 건 취소
+
+[이슈 #12](https://github.com/fregmented/LibertyWiki/issues/12)는 `FR-EDIT-006` 및 `CAP-REVISION-UNDO`의 P0 내부 시험 범위다. 일반 이름공간의 Wikitext 문서 이력에서 부모가 있는 최신 리비전을 취소한다. Native와 Action은 공통 `PageApplicationService`에서 기존 읽기·편집 정책을 적용한다. 요청에 지정한 리비전의 소속과 현재 포인터를 확인한 뒤 저장된 부모 원문을 읽는다. 제한된 대상 리비전에는 기존 편집 권한을 적용한다. 부모 원문이 제한된 경우에는 운영자 요청도 거부한다. 취소를 통해 제한된 원문이 공개 리비전에 복제되는 것을 방지한다.
+
+공개된 부모 원문을 그대로 복원한 새 리비전의 부모는 취소 대상 리비전이다. 새 리비전 추가, 현재 포인터 갱신, `revision.committed` 감사와 outbox 기록은 같은 쓰기 트랜잭션에 속한다. 앞선 쓰기가 현재 포인터를 바꾸면 요청은 충돌로 종료된다. 기존 이력과 원문은 보존되며 실패 시 현재 포인터·리비전·성공 감사·outbox에 변경이 없다. 성공 응답을 잃은 뒤 같은 리비전 ID로 재시도하면 충돌하며, 현재 원문과 이력을 조회해 첫 요청의 결과를 확인할 수 있다.
+
+| 경로 | 내부 시험 계약 |
+|---|---|
+| Native `POST /api/v1/pages/{pageId}/undos` | 문서 UUID와 JSON `revisionId`(UUID), 선택 `summary`. 성공은 201과 `CurrentSourcePage`. 현재 포인터가 바뀌면 409 `EDIT_CONFLICT`, 부모 없는 최초 판은 409 `UNDO_NO_PARENT`. 다른 문서의 ID와 누락된 리비전은 404 `REVISION_NOT_FOUND`. 읽기·편집 정책 거부는 403 `FORBIDDEN`, 대상 또는 부모 원문의 제한으로 거부된 경우는 403 `REVISION_SOURCE_HIDDEN`. [Native OpenAPI](../specs/openapi.yaml) |
+| MediaWiki Action 폼 `POST /w/api.php` | `action=edit`, `title` 또는 숫자 `pageid`, `undo`(양의 숫자 리비전 ID), CSRF `token`, 선택 `summary`. 제공된 `text`보다 서버에서 계산한 취소 원문을 우선한다. 성공은 `edit.result=Success`, `oldrevid`, `newrevid`. 최초 판·누락은 `nosuchrevid`, 다른 문서의 공개 판은 `revwrongpage`, 본문 제한은 `missingcontent`, 쓰기 정책 거부는 `permissiondenied`, 현재 포인터가 바뀌면 `editconflict`를 HTTP 200 오류로 반환한다. [Action Edit](https://www.mediawiki.org/wiki/API:Edit) |
+| MediaWiki REST | 공식 참조에 독립적인 Undo 경로가 없다. `PUT /w/rest.php/v1/page/{title}`는 클라이언트가 보내는 원문으로 문서를 편집하는 경로다. [REST API Reference](https://www.mediawiki.org/wiki/API:REST_API/Reference) |
+
+시험에서는 두 API가 각각 부모 원문을 복원하고 기존 원문을 보존하는지 확인한다. 최초 판·교차 문서·누락·본문 제한·쓰기 정책 거부를 시험하고, 두 취소 요청 또는 편집과 취소가 경쟁할 때 한 건만 커밋되는지 확인한다. PostgreSQL 17에서 새 리비전·감사·outbox의 원자성과 실패 전후 상태를 검증한다. Native HTTP 응답을 OpenAPI와 대조하고 브라우저 이력에서 최신 편집 취소, 복원된 원문과 이력 확인을 검증한다. MediaWiki 1.46.2 고정 기준 서버에서 Action 최신 편집 취소와 적용 가능한 오류를 차등 시험한다.
+
+`compat_gap`에는 최신 리비전에서만 허용하는 조건, 과거 편집과 `undoafter` 구간 취소의 역적용·병합, 충돌·무변경 응답(`nochange`), 최초 판과 문서 소속을 함께 확인할 때의 오류 우선순위, 편집 요약·태그·주시 목록·인증과 권한의 전체 계약이 포함된다. 과거 단일 편집 취소와 연속 편집 롤백은 각각 [이슈 #13](https://github.com/fregmented/LibertyWiki/issues/13)과 [이슈 #16](https://github.com/fregmented/LibertyWiki/issues/16)에서 추적한다. MariaDB 11.8, SQL Server 2022, Oracle 19c의 동시성·가시성·원자성 검증이 남아 있다. 공개 API 호환성 상태는 `INCOMPLETE`다. [Manual: Reverts](https://www.mediawiki.org/wiki/Manual:Reverts), [ADR-0201](../../docs/adr/0201-relational-database-portability.md)
 
 ## 시험 계약과 compat_gap
 

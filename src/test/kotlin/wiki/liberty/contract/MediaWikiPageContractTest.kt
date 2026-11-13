@@ -10,6 +10,11 @@ import org.springframework.boot.test.web.server.LocalServerPort
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
 import java.net.URI
+import java.net.URLEncoder
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 
@@ -50,6 +55,79 @@ class MediaWikiPageContractTest {
         val local = ContractHttp("http://127.0.0.1:$port")
         val title = "History_${UUID.randomUUID()}"
         assertThat(observeHistory(local, title)).isEqualTo(observeHistory(baseline, title))
+    }
+
+    @Test
+    fun `compares undo of latest edit against MediaWiki 1_46_2`() {
+        val baseline = baseline()
+        val local = ContractHttp("http://127.0.0.1:$port")
+        val title = "Undo ${UUID.randomUUID()}"
+        val baselineUrl = checkNotNull(System.getenv("WIKI_MW_BASE_URL")).trimEnd('/') +
+            (System.getenv("WIKI_MW_SCRIPT_PATH") ?: "/w") + "/api.php"
+        assertThat(observeUndo(local, "http://127.0.0.1:$port/w/api.php", title))
+            .isEqualTo(observeUndo(baseline, baselineUrl, title))
+    }
+
+    private fun observeUndo(http: ContractHttp, apiUrl: String, title: String): Map<String, Any> {
+        val first = http.actionCreate(title, "Original source").json.at("/edit/newrevid").asLong()
+        val second = http.actionEdit("title" to title, "Changed source", first).json.at("/edit/newrevid").asLong()
+        assertThat(first).isPositive()
+        assertThat(second).isGreaterThan(first)
+        fun requestUndo(target: Long, pageTitle: String = title): HttpResponse<String> {
+            val params = mapOf("action" to "edit", "title" to pageTitle, "undo" to target.toString(),
+                "text" to "This supplied text must not be saved", "summary" to "Undo latest edit",
+                "token" to csrfToken, "format" to "json", "formatversion" to "2")
+            val body = params.entries.joinToString("&") { (name, value) ->
+                "$name=${URLEncoder.encode(value, Charsets.UTF_8)}"
+            }
+            val request = HttpRequest.newBuilder(URI.create(apiUrl)).timeout(Duration.ofSeconds(15))
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString(body)).build()
+            return HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()
+                .send(request, HttpResponse.BodyHandlers.ofString())
+        }
+        val response = requestUndo(second)
+        assertThat(response.statusCode()).isEqualTo(200)
+        val saved = com.fasterxml.jackson.databind.ObjectMapper().readTree(response.body()).path("edit")
+        assertThat(saved.path("result").asText()).isEqualTo("Success")
+        assertThat(saved.path("oldrevid").asLong()).isEqualTo(second)
+        val undo = saved.path("newrevid").asLong()
+        assertThat(undo).isGreaterThan(second)
+        val current = http.actionRead("titles" to title).json.at("/query/pages/0/revisions/0")
+        assertThat(current.path("revid").asLong()).isEqualTo(undo)
+        assertThat(current.path("parentid").asLong()).isEqualTo(second)
+        assertThat(current.at("/slots/main/content").asText()).isEqualTo("Original source")
+        val history = http.actionQuery("prop" to "revisions", "titles" to title, "rvlimit" to "3", "rvprop" to "ids").json
+        assertThat(history.at("/query/pages/0/revisions").map { it.path("revid").asLong() })
+            .containsExactly(undo, second, first)
+        val missing = requestUndo(999_999_999L)
+        assertThat(missing.statusCode()).isEqualTo(200)
+        assertThat(missing.headers().firstValue("MediaWiki-API-Error").orElse("")).isEqualTo("nosuchrevid")
+        val missingError = com.fasterxml.jackson.databind.ObjectMapper().readTree(missing.body()).path("error")
+        assertThat(missingError.path("code").asText()).isEqualTo("nosuchrevid")
+        assertThat(missingError.path("info").asText()).isEqualTo("There is no revision with ID 999999999.")
+        assertThat(http.actionRead("titles" to title).json.at("/query/pages/0/revisions/0/revid").asLong()).isEqualTo(undo)
+        val firstTitle = "First $title"
+        val only = http.actionCreate(firstTitle, "Only revision").json.at("/edit/newrevid").asLong()
+        val noParent = requestUndo(only, firstTitle)
+        assertThat(noParent.statusCode()).isEqualTo(200)
+        assertThat(noParent.headers().firstValue("MediaWiki-API-Error").orElse("")).isEqualTo("nosuchrevid")
+        val noParentError = com.fasterxml.jackson.databind.ObjectMapper().readTree(noParent.body()).path("error")
+        assertThat(noParentError.path("code").asText()).isEqualTo("nosuchrevid")
+        assertThat(noParentError.path("info").asText()).isEqualTo("There is no revision with ID .")
+        assertThat(http.actionRead("titles" to firstTitle).json.at("/query/pages/0/revisions/0/revid").asLong()).isEqualTo(only)
+        val otherTitle = "Other $title"
+        val otherFirst = http.actionCreate(otherTitle, "Other first").json.at("/edit/newrevid").asLong()
+        val otherLatest = http.actionEdit("title" to otherTitle, "Other second", otherFirst).json.at("/edit/newrevid").asLong()
+        val foreign = requestUndo(otherLatest)
+        assertThat(foreign.statusCode()).isEqualTo(200)
+        assertThat(foreign.headers().firstValue("MediaWiki-API-Error").orElse("")).isEqualTo("revwrongpage")
+        val foreignError = com.fasterxml.jackson.databind.ObjectMapper().readTree(foreign.body()).path("error")
+        assertThat(foreignError.path("code").asText()).isEqualTo("revwrongpage")
+        assertThat(foreignError.path("info").asText()).isEqualTo("r$otherLatest is not a revision of $title.")
+        assertThat(http.actionRead("titles" to title).json.at("/query/pages/0/revisions/0/revid").asLong()).isEqualTo(undo)
+        return mapOf("result" to saved.path("result").asText(), "title" to saved.path("title").asText(),
+            "contentmodel" to saved.path("contentmodel").asText(), "source" to current.at("/slots/main/content").asText())
     }
 
     @Test

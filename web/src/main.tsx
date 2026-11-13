@@ -35,6 +35,8 @@ const errorMessages: Record<string, string> = {
   EXISTS: '이 제목의 문서가 이미 있습니다.',
   COMPARISON_TOO_LARGE: '비교할 리비전이 허용된 크기를 초과했습니다.',
   REVISION_NOT_FOUND: '리비전을 찾을 수 없습니다.',
+  UNDO_NO_PARENT: '이전 리비전이 없어 되돌릴 수 없습니다.',
+  REVISION_SOURCE_HIDDEN: '이 리비전의 원문을 볼 권한이 없습니다.',
   PAGE_NOT_FOUND: '이 제목의 문서를 찾을 수 없습니다.',
 }
 
@@ -132,6 +134,8 @@ function App() {
     if (busy || conflict) return
     const fields = new FormData(event.currentTarget)
     const title = String(fields.get('title'))
+    const savedDraft = pendingDraft ?? (!create && page && (draft !== page.source || summary || baseRevisionId !== page.currentRevisionId)
+      ? { pageId: page.id, baseRevisionId, source: draft, summary } : undefined)
     setError('')
     setStatus('요청 처리 중')
     setPage(undefined)
@@ -147,7 +151,7 @@ function App() {
           summary: String(fields.get('summary')),
         })
         : await requestPage(`/api/v1/pages/by-title/${encodeURIComponent(title)}`, token)
-      const restored = pendingDraft?.pageId === result.id ? pendingDraft : undefined
+      const restored = savedDraft?.pageId === result.id ? savedDraft : undefined
       setPendingDraft(undefined)
       setPage(result)
       setBaseRevisionId(restored?.baseRevisionId ?? result.currentRevisionId)
@@ -221,6 +225,43 @@ function App() {
     }
   }
 
+  async function undoRevision(id: string) {
+    if (!page || busy || conflict) return
+    setBusy(true)
+    setError('')
+    setStatus('편집을 되돌리는 중')
+    try {
+      const result = await requestPage(`/api/v1/pages/${encodeURIComponent(page.id)}/undos`, token, { revisionId: id })
+      const hasDraft = draft !== page.source || summary !== ''
+      setPage(result)
+      if (hasDraft) {
+        setConflict(new RequestError('EDIT_CONFLICT', result.currentRevisionId))
+      } else {
+        setBaseRevisionId(result.currentRevisionId)
+        setDraft(result.source)
+      }
+      clearHistory()
+      setStatus(hasDraft ? '편집을 되돌렸습니다. 작성 중인 원문과 요약은 유지됩니다.' : '편집을 되돌렸습니다.')
+      try {
+        const refreshed = await request<RevisionHistory>(`/api/v1/pages/${encodeURIComponent(page.id)}/revisions?limit=20`, token)
+        setHistory(refreshed.revisions)
+        setNextCursor(refreshed.nextCursor)
+      } catch {
+        setError('되돌리기는 저장되었지만 이력을 새로 불러오지 못했습니다. 문서 이력을 다시 조회하세요.')
+      }
+    } catch (failure) {
+      if (failure instanceof RequestError && failure.code === 'EDIT_CONFLICT') {
+        setError('다른 편집이 먼저 저장되어 되돌릴 수 없습니다. 문서를 다시 조회하고 최신 이력을 확인하세요.')
+        clearHistory()
+      } else {
+        setError(failure instanceof Error ? failure.message : '요청을 처리할 수 없습니다.')
+      }
+      setStatus('')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function fetchRevision(id: string) {
     if (!page || busy) return
     setBusy(true)
@@ -286,7 +327,7 @@ function App() {
         {page && (
           <section aria-labelledby="result-title">
             <h2 id="result-title">{page.normalizedTitle}</h2>
-            <pre aria-label={conflict || baseRevisionId !== page.currentRevisionId ? '조회한 Wikitext 원문' : '현재 Wikitext 원문'}>{page.source}</pre>
+            <pre aria-label={conflict && conflictRevisionId !== page.currentRevisionId ? '조회한 Wikitext 원문' : '현재 Wikitext 원문'}>{page.source}</pre>
             <div>
               <h3>문서 이력</h3>
               <button type="button" disabled={busy} onClick={() => void fetchHistory()}>문서 이력 보기</button>
@@ -300,7 +341,8 @@ function App() {
                         <label className="revision-choice"><input type="radio" name="compare-to" checked={compareTo === item.id} disabled={busy} onChange={() => { setCompareTo(item.id); setComparison(undefined) }} /> 끝 {item.id}</label>{' '}
                         <time dateTime={item.createdAt}>{item.createdAt}</time>{' · '}
                         <span>{item.summary}</span>{' '}
-                        <button type="button" disabled={busy} onClick={() => void fetchRevision(item.id)}>리비전 {item.id} 보기</button>
+                        <button type="button" disabled={busy} onClick={() => void fetchRevision(item.id)}>리비전 {item.id} 보기</button>{' '}
+                        {item.id === page.currentRevisionId && item.parentRevisionId && <button type="button" disabled={busy || !!conflict} onClick={() => void undoRevision(item.id)}>리비전 {item.id} 되돌리기</button>}
                       </li>
                     ))}
                   </ul>
