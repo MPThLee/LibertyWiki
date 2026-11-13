@@ -36,6 +36,7 @@ MediaWiki Compatible 계열과 Native RESTful 계열은 **동일한 기능 수**
 
 - MediaWiki 1.46.2 구성의 Action/REST 경로 inventory 전수·매개변수·권한·오류 계약 시험 통과.
 - 활성 기본 배포 확장의 사용자 기능·Wikitext·API 동작 전수 통과.
+- 제품 UI는 [Liberty와 여백의 스킨 수용 기준](03_EXTENSION_PARITY.md#3-제품-스킨-2종)을 통과해야 합니다. 스킨 선택에 해당하는 코어 API는 기준 서버의 계약을 검증합니다.
 - 기능별 Native RESTful 계약 등록률 100%, API 간 state/ACL/audit parity 불일치 0.
 - 고정 데이터셋의 revision/files 해시·공개 ID/URL 의미 보존을 포함한 이관 기능 시험 통과. 특정 운영 위키의 실제 전환 승인은 별도 G-MIGRATION이며 그 사이트 전체 기능을 GA 범위로 자동 편입하지 않습니다.
 - 향후 버전 지원 표기는 **그 버전의 API 이중 표면과 위키텍스트를 검증한 뒤**에만 합니다.

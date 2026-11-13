@@ -5,9 +5,9 @@
 ## 0. 프로젝트의 절대 불변 조건 (MUST)
 
 1. **독립 구현 / AGPL:** 프로젝트 신규 코드의 라이선스는 `AGPL-3.0-only`입니다. LICENSE·SPDX·소스 제공·SBOM·서드파티 라이선스 검토 없이 배포해서는 안 됩니다.
-2. **MediaWiki 코드 재사용 전면 금지:** MediaWiki 코어, Parsoid, MediaWiki 번들 및 서드파티 확장, 스킨의 PHP/JS/CSS/SQL/테스트 구현 코드를 복사·변환·번역·포팅·링크·내장하지 않습니다. `Copy from upstream`, 소스 붙여넣기 후 AI 코딩, 유사 로직을 문자 그대로 옮기는 작업을 거부합니다. 기능 설명·공개 API 계약·관찰한 동작·데이터 문법만 근거로 독자적으로 구현합니다.
+2. **MediaWiki 구현 코드 재사용 금지:** MediaWiki 코어, Parsoid, MediaWiki 번들 및 서드파티 확장, 스킨의 PHP/JS/CSS/SQL/테스트 구현 코드를 복사·변환·번역·포팅·링크·내장하지 않습니다. 기능 설명·공개 API 계약·관찰한 동작·데이터 문법을 근거로 독자적으로 구현합니다. 사용자가 재사용을 승인한 `librewiki/liberty-skin`의 코드와 리소스에는 [ADR-0205](docs/adr/0205-product-skins.md)의 예외를 적용합니다.
    사용자 승인에 따라 ParserTests의 fixture 데이터는 출처·버전·해시·라이선스·원래 고지를 확인해 검증 자료로 사용할 수 있습니다. 이 허용은 파서·테스트 실행기·정규화기·훅의 구현 코드 재사용을 허용하지 않습니다. [ADR-0204](docs/adr/0204-parser-test-data-boundary.md)를 따릅니다.
-3. **MediaWiki 기능 호환:** 최초 기준선 `MediaWiki 1.46.2`, 코어와 기본 배포 확장/스킨 기능 및 활성화된 API, Wikitext·템플릿·ParserFunctions·Scribunto Lua·시각 편집 왕복 변환까지 GA 전 검증합니다. 일부 구현을 전체 호환이라고 광고하면 안 됩니다.
+3. **MediaWiki 기능 호환:** 최초 기준선 `MediaWiki 1.46.2`의 코어와 기본 배포 확장 기능 및 활성화된 API, Wikitext·템플릿·ParserFunctions·Scribunto Lua·시각 편집 왕복 변환까지 GA 전 검증합니다. 제품 스킨 범위와 색상 모드는 [ADR-0205](docs/adr/0205-product-skins.md)를 따릅니다. 일부 구현을 전체 호환이라고 광고하면 안 됩니다.
 4. **API 계열은 두 개:** `MediaWiki Compatible` = `/w/api.php` + `/w/rest.php/*`, `Native RESTful` = `/api/v1/*`. 기존 MediaWiki REST API가 Native RESTful이라는 주장은 틀립니다. 모든 도메인 기능·확장 기능에는 Native REST operation이 있어야 하며, 기준 MediaWiki에서 원본 API가 있는 경우 정확한 Compat 경로도 제공해야 합니다.
 5. **향후 새 MediaWiki API:** 추가·변경·삭제되는 API를 지원할 때 **같은 기능 변경에서 양 API 계열의 route/문서/계약 테스트/권한/side effect 검증**을 모두 업데이트합니다. 한쪽만 구현한 기능은 `INCOMPLETE`; GA/버전 호환 선언을 금지합니다.
 6. **기능 동작의 단일 원천:** 외부 API 어댑터는 `ApplicationService`를 호출합니다. API/controller 안에 비즈니스 로직, SQL 조합, 권한 우회, 스토리지 직접 쓰기를 두지 않습니다.
@@ -69,7 +69,7 @@
 
 ## 5. 코드 재사용·출처 검증 절차
 
-- 원본 MediaWiki/Parsoid/확장·스킨 소스 URL, 파일, 코드블록을 코딩 에이전트 입력으로 복사하지 않습니다. 공개 API 문서 링크와 직접 관찰한 테스트 결과는 사용 가능합니다.
+- §0.2의 재사용 경계를 코드 조사와 에이전트 입력에도 적용합니다. 공개 API 문서 링크와 직접 관찰한 테스트 결과는 사용 가능합니다.
 - 기존 오픈소스 라이브러리는 SPDX ID, 출처, 라이선스 호환 및 공급망 검토 후 사용합니다. MediaWiki 본체/확장의 원본 구현 코드를 대체 라이브러리라 칭하여 재사용하지 않습니다.
 - 출처가 의심되는 구현/복제 요청은 작업을 중지하고 자체 구현용 명세·테스트 케이스 수집으로 변경합니다.
 

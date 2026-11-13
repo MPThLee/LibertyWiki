@@ -84,7 +84,7 @@ API/확장,FR-API-001,네이티브 REST API,페이지/리비전/파일/감시/�
 API/확장,FR-API-002,MediaWiki Action API 어댑터,"합의된 액션(query, parse, edit, siteinfo 등)을 `/w/api.php`에서 변환합니다.",동일 fixture에 필드·상태·오류 의미 일치.,P1,개발자,PRODUCT_1_0
 API/확장,FR-API-003,API 인증·쿼터,"세션/토큰 권한, 속도 제한, 멱등 요청 및 CSRF 방어를 적용합니다.",권한·만료·초과 요청에서 표준 오류 반환.,P0,개발자,PRODUCT_1_0
 API/확장,FR-API-004,확장 등록 시스템,"검증된 서버 플러그인과 이벤트 구독, UI 슬롯 등록을 지원합니다.",호환 버전 미달 플러그인을 실행하지 않습니다.,P1,개발자,PRODUCT_1_0
-API/확장,FR-API-005,스킨/테마,반응형 테마와 사용자·사이트별 기본 테마 설정을 제공합니다.,콘텐츠와 CSS/테마를 분리하고 접근성 시험을 통과합니다.,P1,일반 사용자,PRODUCT_1_0
+API/확장,FR-API-005,스킨과 색상 모드,반응형 스킨 Liberty·여백에 라이트·다크 모드를 제공하며 사용자 선택과 사이트 기본값을 각각 설정합니다.,"콘텐츠와 스킨 스타일 분리, 모든 스킨·모드 조합의 반응형·접근성 시험, 개인 설정 저장·초기화와 사이트 기본값 적용",P1,일반 사용자·관리자,PRODUCT_1_0
 API/확장,FR-API-006,가젯/사용자 스크립트,허용된 UI 슬롯·샌드박스 API에서 스크립트와 UI 기능을 등록합니다.,스크립트 취약점·무한 로딩·권한 우회 억제.,P2,개발자,PRODUCT_1_0
 API/확장,FR-API-007,웹훅·이벤트 발행,문서/파일/관리 이벤트를 Outbox 기반으로 안전하게 전달합니다.,중복·순서변경·재시도·Dead letter 처리 검증.,P1,개발자,PRODUCT_1_0
 API/확장,FR-API-008,이전/내보내기 API,"MediaWiki XML export, 파일, revision 데이터를 검증 가능한 방식으로 이관합니다.",중간 실패 이후 이어받기·재실행이 멱등이며 공개 ID/URL 의미·이력·해시가 보존됩니다.,P1,운영자,PRODUCT_1_0
@@ -114,7 +114,7 @@ API/확장,FR-API-008,이전/내보내기 API,"MediaWiki XML export, 파일, rev
 추가 승인·공통 계약,FR-SCALE-001,영어 위키백과급 용량,"1억 페이지, 20억 revision을 처리할 데이터·색인·캐시·job architecture; 파일은 개수·총바이트 별도 scaling",크기/읽기/쓰기/검색/재색인/백업 프로파일별 합격 증거 제출,FUTURE_CAPACITY_CERTIFICATION,플랫폼/검증 담당자,ENWIKI_CERTIFICATION
 추가 승인·공통 계약,FR-SCALE-002,수평 확장/장애 격리,"API stateless, CDN, 다중 cache 계층, search shards, DB partition/replica, hot page protection, idempotent queue",multi-node 부하/rolling deploy/장애복구 동안 무손실 유지,FUTURE_CAPACITY_CERTIFICATION,플랫폼/검증 담당자,ENWIKI_CERTIFICATION
 추가 승인·공통 계약,FR-LIC-001,AGPL 배포 의무,"LICENSE, source offer, NOTICE, 고지 UI, SBOM, 빌드·배포 스크립트 제공","사용자/네트워크 이용자 경로에서 원본 소스 제공 안내 확인, 법률 검토 승인",GA_REQUIRED_UNSCHEDULED,플랫폼/검증 담당자,PRODUCT_1_0
-추가 승인·공통 계약,FR-LIC-002,클린룸 원칙,기존 MediaWiki·기본 번들·스킨·Parsoid의 소스코드 번역·복사·포팅·링킹 금지,"변경사항 provenance 기록, 금지 코드 검색, 코드 심사 추적성",GA_REQUIRED_UNSCHEDULED,플랫폼/검증 담당자,PRODUCT_1_0
+추가 승인·공통 계약,FR-LIC-002,클린룸 원칙,클린룸 정책에 따른 독립 구현 및 승인된 재사용 범위 적용,"변경사항과 재사용 출처 기록, 금지 코드 검색, 코드 심사 추적성",GA_REQUIRED_UNSCHEDULED,플랫폼/검증 담당자,PRODUCT_1_0
 추가 승인·공통 계약,FR-WEB-001,웹 전용 클라이언트,데스크톱·모바일에서 동일 도메인 정책과 기능을 갖는 반응형 웹,320~1920px 브라우저/스크린리더/키보드 시험; 모바일 앱 없음,GA_REQUIRED_UNSCHEDULED,플랫폼/검증 담당자,PRODUCT_1_0
 추가 승인·공통 계약,FR-DUALAPI-001,공개 엔드포인트 계열 2개,"MediaWiki Compatible: `/w/api.php`, `/w/rest.php/*`; Native RESTful: `/api/v1/*`; 웹 UI는 주로 Native 호출","기존 MW API 오류·토큰 등은 원형 보존, Native는 표준 HTTP/JSON 계약; 서로 다른 표면을 혼동하지 않음",GA_REQUIRED_UNSCHEDULED,API 플랫폼,PRODUCT_1_0
 추가 승인·공통 계약,FR-DUALAPI-002,공통 도메인 사용,"양 어댑터가 동일한 `ApplicationService`, 명령/질의, 권한 정책, transaction/outbox를 호출",API별 개별 데이터 쓰기나 중복 비즈니스 로직 금지; side-effect 비교 시험 동일,GA_REQUIRED_UNSCHEDULED,API 개발자,PRODUCT_1_0

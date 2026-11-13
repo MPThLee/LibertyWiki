@@ -1,6 +1,6 @@
 # LibertyWiki
 
-MediaWiki 1.46.2의 코어·기본 배포 확장·스킨 기능을 독립 구현하는 AGPL-3.0-only 위키 프로젝트입니다. PostgreSQL 기반의 [내부 시험용 문서 생성·원문 편집·이력 및 원문 조회](wiki_design/source/15_PAGE_SOURCE_SLICE.md)를 실행할 수 있습니다. 정식 호환성과 출시 기준은 설계 문서에서 정의합니다.
+MediaWiki 1.46.2의 코어·기본 배포 확장 기능을 독립 구현하는 AGPL-3.0-only 위키 프로젝트입니다. PostgreSQL 기반의 [내부 시험용 문서 생성·원문 편집·이력 및 원문 조회](wiki_design/source/15_PAGE_SOURCE_SLICE.md)를 실행할 수 있습니다. 제품 스킨은 라이트·다크 모드를 지원하는 [Liberty와 여백](wiki_design/source/03_EXTENSION_PARITY.md#3-제품-스킨-2종)으로 계획되어 있습니다. 정식 호환성과 출시 기준은 설계 문서에서 정의합니다.
 
 현재 설계는 [문서 안내](wiki_design/source/00_README.md)에서 시작합니다. [제품 기획](wiki_design/source/01_PRODUCT_PLAN.md), [요구사항](wiki_design/source/02_REQUIREMENTS.md), [두 API 계약](wiki_design/source/14_DUAL_API_CONTRACT.md), [아키텍처](wiki_design/source/04_ARCHITECTURE.md), [결정 기록](docs/adr/), [용어집](GLOSSARY.md)을 순서대로 참고합니다.
 

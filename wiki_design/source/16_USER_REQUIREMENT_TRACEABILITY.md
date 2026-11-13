@@ -71,6 +71,7 @@
 | [AGENTS §0·§3–6](../../AGENTS.md), [PRD §3](01_PRODUCT_PLAN.md#3-호환성-범위와-완료의-정의), [두 API 계약](14_DUAL_API_CONTRACT.md) | FR-COMP-001–004, FR-DUALAPI-001–012, FR-LIC-001/002. 고정 기준의 UI·API·Wikitext 동작과 독립 구현, 두 API의 권한·부작용 계약을 검증합니다. |
 | [ADR-0201](../../docs/adr/0201-relational-database-portability.md) | FR-DBMS-001/002. 인터뷰 Q10–11, Q14, Q19, Q21–22의 DB 선택·지원 하한과 동등성. |
 | [ADR-0202](../../docs/adr/0202-extension-and-release-boundaries.md), [PRD §9](01_PRODUCT_PLAN.md#9-제품-출시와-실제-이전의-분리) | FR-EXT-001–003, FR-STORE-001–004, FR-RELEASE-001, FR-API-008, FR-SITE-005, FR-PAGE-008, FR-AUTH-001/008, FR-ADMIN-007. 인터뷰 Q2–8, Q12–13, Q15–17, Q20, Q25–26의 독립 확장·저장소·1.0 프로파일과 별도 이전 승인. |
+| [ADR-0205](../../docs/adr/0205-product-skins.md) | FR-API-005, FR-LIC-002. 제품 스킨 Liberty·여백, 두 스킨의 라이트·다크 모드, Liberty 코드·리소스 재사용 승인. |
 | [ADR-0203](../../docs/adr/0203-runtime-and-infrastructure-independence.md) | FR-RUNTIME-001, FR-OPS-001/003/004. 앱 ARM64/x86-64와 독립 인프라 실행환경 및 사용자 선택 오케스트레이션. |
 | [ADR-0204](../../docs/adr/0204-parser-test-data-boundary.md), [호환 설계](10_COMPATIBILITY.md) | FR-PARSERDATA-001, FR-PARSE-001/007/008, FR-COMP-003/004. 승인된 fixture 데이터의 출처·설정과 독립 실행기, 손실 없는 왕복 검증. |
 

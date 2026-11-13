@@ -84,7 +84,7 @@ FR-API-001,Core,네이티브 REST API,API,P0,OpenAPI 스키마 검증 및 입력
 FR-API-002,Core,MediaWiki Action API 어댑터,API,P1,동일 fixture에 필드·상태·오류 의미 일치.,TC-API-002,PLANNED,PRODUCT_1_0
 FR-API-003,Core,API 인증·쿼터,API,P0,권한·만료·초과 요청에서 표준 오류 반환.,TC-API-003,PLANNED,PRODUCT_1_0
 FR-API-004,Core,확장 등록 시스템,API,P1,호환 버전 미달 플러그인을 실행하지 않습니다.,TC-API-004,PLANNED,PRODUCT_1_0
-FR-API-005,Core,스킨/테마,API,P1,콘텐츠와 CSS/테마를 분리하고 접근성 시험을 통과합니다.,TC-API-005,PLANNED,PRODUCT_1_0
+FR-API-005,Core,스킨과 색상 모드,API,P1,"Liberty·여백의 라이트·다크 조합을 360·768·1440px에서 검증하고 대비·키보드 접근성 및 개인 설정 저장·초기화와 사이트 기본값 적용을 시험합니다.",TC-API-005,PLANNED,PRODUCT_1_0
 FR-API-006,Core,가젯/사용자 스크립트,API,P2,스크립트 취약점·무한 로딩·권한 우회 억제.,TC-API-006,PLANNED,PRODUCT_1_0
 FR-API-007,Core,웹훅·이벤트 발행,API,P1,중복·순서변경·재시도·Dead letter 처리 검증.,TC-API-007,PLANNED,PRODUCT_1_0
 FR-API-008,Core,이전/내보내기 API,API,P1,중간 실패 이후 이어받기·재실행이 멱등이며 공개 ID/URL 의미·이력·해시가 보존됩니다.,TC-API-008,PLANNED,PRODUCT_1_0
@@ -148,7 +148,7 @@ FR-EXT-003,Core,확장 Wikitext/API 훅,Extension,GA_REQUIRED_UNSCHEDULED,개별
 FR-SCALE-001,Core,영어 위키백과급 용량,Capacity,FUTURE_CAPACITY_CERTIFICATION,크기/읽기/쓰기/검색/재색인/백업 프로파일별 합격 증거 제출,TC-SCALE-001,PLANNED,ENWIKI_CERTIFICATION
 FR-SCALE-002,Core,수평 확장/장애 격리,Capacity,FUTURE_CAPACITY_CERTIFICATION,multi-node 부하/rolling deploy/장애복구 동안 무손실 유지,TC-SCALE-002,PLANNED,ENWIKI_CERTIFICATION
 FR-LIC-001,Core,AGPL 배포 의무,Provenance,GA_REQUIRED_UNSCHEDULED,"사용자/네트워크 이용자 경로에서 원본 소스 제공 안내 확인, 법률 검토 승인",TC-LIC-001,PLANNED,PRODUCT_1_0
-FR-LIC-002,Core,클린룸 원칙,Provenance,GA_REQUIRED_UNSCHEDULED,"변경사항 provenance 기록, 금지 코드 검색, 코드 심사 추적성",TC-LIC-002,PLANNED,PRODUCT_1_0
+FR-LIC-002,Core,클린룸 원칙,Provenance,GA_REQUIRED_UNSCHEDULED,"변경사항과 재사용 출처 기록, 금지 코드 검색, 코드 심사 추적성",TC-LIC-002,PLANNED,PRODUCT_1_0
 FR-WEB-001,Core,웹 전용 클라이언트,Web,GA_REQUIRED_UNSCHEDULED,320~1920px 브라우저/스크린리더/키보드 시험; 모바일 앱 없음,TC-WEB-001,PLANNED,PRODUCT_1_0
 FR-DUALAPI-001,Core,공개 엔드포인트 계열 2개,API,GA_REQUIRED_UNSCHEDULED,"기존 MW API 오류·토큰 등은 원형 보존, Native는 표준 HTTP/JSON 계약; 서로 다른 표면을 혼동하지 않음",TC-DUALAPI-001,PLANNED,PRODUCT_1_0
 FR-DUALAPI-002,Core,공통 도메인 사용,API,GA_REQUIRED_UNSCHEDULED,API별 개별 데이터 쓰기나 중복 비즈니스 로직 금지; side-effect 비교 시험 동일,TC-DUALAPI-002,PLANNED,PRODUCT_1_0

@@ -9,7 +9,7 @@
 | T0 기준선 | 1.46.2 코어/확장 활성 상태 확인, API 전체 inventory, 다중 DB/CPU/저장소 지원표, AGPL·fixture 출처/라이선스, 고정 테스트 코퍼스 | G0 — 출처 기록·검증 하니스 |
 | T1 위험 검증 | Wikitext/템플릿/Lua/시각 편집 roundtrip 및 Local/S3 정합성, 확장 SDK PoC | G1 — 파서·스토리지 최소 적합성 |
 | T2 코어 개발 | 페이지·리비전·보호·검색·파일·웹 UI·두 API 어댑터·권한·감사 | G2 — 내부 MVP·양계열 smoke |
-| T3 기본 배포 기능 | 번들 34종·스킨 5종, Wikitext 고급·편집기·관리 기능, extension capability 노출 | G3 — 기능·확장 시험 |
+| T3 기본 배포 기능 | 번들 확장 34종, 제품 스킨 2종의 라이트·다크 모드, Wikitext 고급·편집기·관리 기능, extension capability 노출 | G3 — 기능·확장·스킨 시험 |
 | T4 전체 호환 | 기준 MediaWiki Action/REST 원본 계약 전수 + Native REST 기능 전수 대응 + 데이터 이전 | G4 — API·파서·인가·부작용 전수 |
 | 1.0 인수 | RELEASE_1_0의 기능·성능·복구·보안·접근성 | G5 — 제품 1.0 출시 승인 |
 | 후속 기능 | SRS §11의 공통 관리·편집 기능과 선택 확장 | 내부 MVP 및 기본 호환성·확장 기능 테스트 후 착수, 각 FR의 수용 기준으로 판정 |
@@ -41,7 +41,7 @@
 | WBS-13 | VisualEditor/Cite/ParserFunctions/Math | 12 | editor extension suites | P1 |
 | WBS-14 | Lua/Scribunto/advanced parser extensions | 04,13 | sandbox + test suite | P1 |
 | WBS-15 | AbuseFilter/TitleBlacklist/CheckUser 등 | 09,11 | security extension suites | P1/P2 |
-| WBS-16 | 미디어·코드·스킨 번들 기능 | 08,10 | extension parity suite | P1 |
+| WBS-16 | 미디어·코드 번들 기능과 제품 스킨 | 08,10 | extension parity suite, 제품 스킨 수용시험 | P1 |
 | WBS-17 | MW Action+MediaWiki REST 호환 어댑터 및 Native RESTful API의 **양계열 동시 구현** | 06,12 | 양계열 계약+cross-surface parity fixtures | P0/P1 |
 | WBS-18 | XML/DB/File 이관·delta·검증 | 05,08 | migration pipeline | P1 |
 | WBS-19 | 백업/모니터링/배포/DR | 05,08,11 | runbooks, dashboards | P0/P1 |
@@ -94,9 +94,9 @@
 - 재실행·중단 후 재개·잘못된 부분 되돌리기를 테스트합니다.
 - [이전 조건의 수용 기준](16_USER_REQUIREMENT_TRACEABILITY.md#이전-조건의-수용-기준)에 따라 현행 문법·확장·운영 작업의 의존성을 확인하고, 보존·변환 방식과 대상 사례를 전환 승인에 연결합니다.
 
-### Gate G3 — 번들 기능 완료
+### Gate G3 — 번들 확장과 제품 스킨 완료
 
-- 34종 확장과 5개 레이아웃에 **각각** 수용시험 기록이 있어야 합니다. 미완료 항목은 Gap ID로 추적하며 필수 기능 gap이 남으면 제품 GA를 승인하지 않습니다.
+- 34종 확장 각각의 수용시험과 [제품 스킨 2종](03_EXTENSION_PARITY.md#3-제품-스킨-2종)의 라이트·다크 조합별 수용시험을 통과해야 합니다. 미완료 항목은 Gap ID로 추적하며 필수 기능 gap이 남으면 제품 GA를 승인하지 않습니다.
 - 각 기본 제공 확장은 독립 manifest·버전·수명주기·공개 SPI를 갖고 네 DBMS에서 개별 증거를 제출합니다.
 - CheckUser/가젯처럼 고위험 기능은 독립 보안·법무 승인이 선행되어야 합니다.
 
