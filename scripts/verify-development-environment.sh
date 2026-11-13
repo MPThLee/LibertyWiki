@@ -4,8 +4,40 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# Validate external targets before installing dependencies or changing state.
+db_engine=${WIKI_VERIFY_DB_ENGINE:-postgres}
+case "$db_engine" in
+  postgres) ;;
+  mariadb)
+    for name in WIKI_DB_URL WIKI_DB_USER WIKI_DB_PASSWORD WIKI_TEST_DB_URL WIKI_TEST_DB_USER WIKI_TEST_DB_PASSWORD; do
+      if [[ -z "${!name:-}" ]]; then
+        echo "MariaDB verification requires $name for a disposable database." >&2
+        exit 1
+      fi
+    done
+    jdbc_pattern='^jdbc:mariadb://[^/?#@]+/([A-Za-z0-9_]+)(\?[^#]*)?$'
+    if [[ ! "$WIKI_DB_URL" =~ $jdbc_pattern ]]; then
+      echo 'WIKI_DB_URL must be a jdbc:mariadb:// URL with an explicit catalog.' >&2
+      exit 1
+    fi
+    runtime_catalog=${BASH_REMATCH[1]}
+    if [[ ! "$WIKI_TEST_DB_URL" =~ $jdbc_pattern ]]; then
+      echo 'WIKI_TEST_DB_URL must be a jdbc:mariadb:// URL with an explicit catalog.' >&2
+      exit 1
+    fi
+    test_catalog=${BASH_REMATCH[1]}
+    if [[ "$(printf %s "$runtime_catalog" | tr '[:upper:]' '[:lower:]')" == "$(printf %s "$test_catalog" | tr '[:upper:]' '[:lower:]')" ]]; then
+      echo 'MariaDB runtime and test catalogs must be different.' >&2
+      exit 1
+    fi
+    ;;
+  *) echo 'WIKI_VERIFY_DB_ENGINE must be postgres or mariadb.' >&2; exit 1 ;;
+esac
+
 # Require the flake's tools so this checks the development shell, not host tools.
-for tool in java node initdb pg_ctl psql; do
+tools=(java node)
+if [[ "$db_engine" == postgres ]]; then tools+=(initdb pg_ctl psql createdb); fi
+for tool in "${tools[@]}"; do
   case "$(command -v "$tool")" in
     /nix/store/*) ;;
     *) printf 'Run this script with nix develop --command bash %s\n' "$0" >&2; exit 1 ;;
@@ -14,7 +46,7 @@ done
 case "${JAVA_HOME:-}" in /nix/store/*) ;; *) echo 'JAVA_HOME must point to the Nix JDK.' >&2; exit 1 ;; esac
 java -version
 node --version
-psql --version
+if [[ "$db_engine" == postgres ]]; then psql --version; fi
 
 # Use an absolute system temporary directory, never a caller-supplied repository path.
 state_dir=$(mktemp -d /tmp/libertywiki-verify.XXXXXXXX)
@@ -54,7 +86,7 @@ cleanup() {
           process.stdin.setEncoding("utf8");
           process.stdin.on("data", chunk => input += chunk);
           process.stdin.on("end", () => {
-            for (const name of ["PGPASSWORD", "WIKI_HTTP_OPERATOR_TOKEN"]) {
+            for (const name of ["PGPASSWORD", "WIKI_DB_PASSWORD", "WIKI_TEST_DB_PASSWORD", "WIKI_HTTP_OPERATOR_TOKEN", "WIKI_DB_URL", "WIKI_TEST_DB_URL"]) {
               const secret = process.env[name];
               if (secret) input = input.split(secret).join("[REDACTED]");
             }
@@ -72,6 +104,7 @@ trap 'exit 143' TERM
 free_port() {
   node -e 'const s = require("node:net").createServer(); s.listen(0, "127.0.0.1", () => { console.log(s.address().port); s.close(); }); s.on("error", () => process.exit(1));'
 }
+if [[ "$db_engine" == postgres ]]; then
 export PGHOST=127.0.0.1 PGPORT
 PGPORT=$(free_port)
 export PGUSER=libertywiki
@@ -92,10 +125,15 @@ export WIKI_DB_URL="jdbc:postgresql://127.0.0.1:$PGPORT/libertywiki"
 export WIKI_DB_USER="$PGUSER" WIKI_DB_PASSWORD="$PGPASSWORD"
 export WIKI_TEST_DB_URL="jdbc:postgresql://127.0.0.1:$PGPORT/libertywiki_test"
 export WIKI_TEST_DB_USER="$PGUSER" WIKI_TEST_DB_PASSWORD="$PGPASSWORD"
+  contract_task=postgresTest
+else
+  echo 'Using caller-supplied disposable MariaDB catalogs; they will not be stopped or deleted.'
+  contract_task=mariaDbTest
+fi
 
 npm ci --prefix web
 npm run build --prefix web
-./gradlew test check postgresTest bootJar
+./gradlew test check "$contract_task" bootJar
 if [[ -n "${WIKI_MW_BASE_URL:-}" ]]; then
   ./gradlew mediaWikiTest
 else

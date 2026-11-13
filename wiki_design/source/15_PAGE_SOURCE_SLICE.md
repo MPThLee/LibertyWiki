@@ -2,13 +2,21 @@
 
 영어 첫 글자 대문자 규칙을 사용하는 일반 이름공간(0)의 Wikitext를 제목으로 생성하고, 제목·ID로 현재 revision을 조회하고, 현재 revision을 기준으로 기존 문서의 원문 전체를 편집한다. 넘겨주기 지시문도 입력한 원문 그대로 반환한다. 생성과 조회는 FR-PAGE-001/002, FR-NS-003 및 CAP-PAGE-CREATE, CAP-PAGE-READ, CAP-PAGE-READ-TITLE에 해당한다. 편집은 FR-EDIT-001/002/003 및 CAP-REVISION-COMMIT의 일부를 제공한다. 렌더링, 삭제, 보호, 이름공간 설정과 세션 인증은 후속 범위다.
 
+## 관계형 저장 어댑터
+
+같은 `PageRepository` 계약과 공개 HTTP 계약 시험을 PostgreSQL 17·MariaDB 11.8에 적용한다. JDBC URL로 엔진별 Flyway 스키마와 UUID·시각 매핑을 선택한다. 기존 PostgreSQL 마이그레이션의 내용과 체크섬은 유지한다. MariaDB의 제목 고유성은 `utf8mb4_nopad_bin`, 원문은 UTF-8 1 MiB를 보존할 수 있는 `MEDIUMTEXT`를 사용한다. 시각은 UTC로 저장하고 두 API에서 같은 시점을 반환한다.
+
+MariaDB는 지연 외래 키를 지원하지 않으므로 문서 생성 트랜잭션 안에서 현재 포인터를 비운 문서를 만든 후 첫 리비전을 삽입하고 포인터를 설정한다. 기존 문서 편집도 새 리비전 삽입 후 현재 포인터를 갱신한다. 중간 상태를 커밋하지 않으며 실패하면 문서·리비전·감사·outbox를 함께 롤백한다. 쓰기 잠금 뒤 최신 상태를 읽도록 `READ_COMMITTED`를 사용한다. DB별 연결·읽기·문장·잠금 대기 시간 한도를 적용한다.
+
+Oracle MySQL을 MariaDB와 같은 엔진으로 취급하지 않는다. SQL Server·Oracle Database를 포함한 나머지 엔진의 스키마·저장 어댑터는 후속 구현 범위이며, [ADR-0201](../../docs/adr/0201-relational-database-portability.md)의 제품 출시 요구를 축소하지 않는다.
+
 ## 제목 및 상태
 
 1. 제목을 NFC로 정규화한 후 ASCII 공백과 밑줄을 하나의 공백으로 합치고 양끝에서 제거한다. 첫 코드포인트를 Unicode 대문자로 변환한 후 NFC로 정규화한다. 이후 글자의 대소문자는 보존한다.
 2. 빈 값, `.`, `..`, `~~~` 포함 값, 제어문자, 퍼센트 인코딩·HTML 문자 참조 패턴, URL 경로에 영향을 주는 문자, 괄호 구문 `[]{}<>`, 파이프, 콜론을 거부한다. 정규화한 키는 UTF-8 255바이트 이하다. 콜론, 슬래시, 지역별 대소문자 및 다른 이름공간은 compat_gap이다.
    HTTP 경로에서 세미콜론은 `%3B`로 인코딩한다.
 3. 공통 PageApplicationService에서 먼저 read 권한을 확인한다. 생성에는 edit과 create 권한도 필요하다. 읽기 권한이 없는 경우 기존 제목과 없는 제목에 동일한 거부 응답을 반환한다. 내부 시험용 운영자 Bearer 자격증명과 설정 가능한 익명 정책을 사용한다. 초기값은 익명 조회 허용, 익명 편집·생성 거부다.
-4. PostgreSQL에서 `(namespace_id, normalized_title)`의 고유 제약으로 동시 요청을 직렬화한다. 같은 트랜잭션에서 문서, 부모가 없는 첫 불변 revision, 성공 감사 이벤트, 발행 대기 outbox 이벤트를 저장한다. 원문은 입력한 문자열 그대로 저장하고 SHA-256은 UTF-8 바이트에서 계산한다. 출처 요청 ID를 감사와 outbox에서 공통으로 사용한다.
+4. PostgreSQL·MariaDB에서 `(namespace_id, normalized_title)`의 고유 제약으로 동시 요청을 직렬화한다. 같은 트랜잭션에서 문서, 부모가 없는 첫 불변 revision, 성공 감사 이벤트, 발행 대기 outbox 이벤트를 저장한다. 원문은 입력한 문자열 그대로 저장하고 SHA-256은 UTF-8 바이트에서 계산한다. 출처 요청 ID를 감사와 outbox에서 공통으로 사용한다.
 5. 실패 시 새 문서·revision·감사·outbox가 남지 않는다. 네트워크 응답을 잃은 생성 요청을 같은 제목으로 재시도하면 충돌한다. 현재 원문을 다시 조회해 결과를 확인할 수 있다. Idempotency-Key 응답 재생 및 outbox 배달은 후속 범위다.
 
 ## 공개 계약
@@ -26,7 +34,7 @@
 
 `PageApplicationService`는 read와 edit 권한을 문서 조회 전에 확인한다. 익명 편집에는 `WIKI_ANONYMOUS_READ`와 `WIKI_ANONYMOUS_EDIT`가 모두 필요하다. 원문은 유효한 Unicode로 UTF-8 1,048,576바이트 이하이며, 빈 원문도 허용한다. 변경 요약은 유효한 Unicode 500코드포인트 이하이며, 요약이 없으면 빈 문자열을 저장한다. 세 API 경로는 같은 입력 검증과 쓰기 정책을 적용한다.
 
-클라이언트는 현재 원문을 조회할 때 받은 기준 revision ID를 저장 요청에 포함한다. 기준 ID가 해당 문서의 현재 revision과 다르면 충돌로 종료한다. PostgreSQL 쓰기 트랜잭션은 현재 revision 포인터가 기준 ID인 경우에만 갱신하는 낙관적 동시성 제어를 사용한다. 경쟁 요청이 먼저 저장하면 충돌로 종료한다. 저장에 성공하면 직전 revision을 부모로 둔 불변 revision이 추가된다. 입력 원문이 현재 원문과 같아도 유효한 기준 ID로 저장하면 새 revision이 추가된다.
+클라이언트는 현재 원문을 조회할 때 받은 기준 revision ID를 저장 요청에 포함한다. 기준 ID가 해당 문서의 현재 revision과 다르면 충돌로 종료한다. 두 DB의 쓰기 트랜잭션은 현재 revision 포인터가 기준 ID인 경우에만 갱신하는 낙관적 동시성 제어를 사용한다. 경쟁 요청이 먼저 저장하면 충돌로 종료한다. 저장에 성공하면 직전 revision을 부모로 둔 불변 revision이 추가된다. 입력 원문이 현재 원문과 같아도 유효한 기준 ID로 저장하면 새 revision이 추가된다.
 
 새 revision에는 작성자, UTC 시각, 변경 요약과 UTF-8 원문의 SHA-256을 저장한다. `revision.committed` 성공 감사와 outbox 이벤트를 동일 트랜잭션으로 기록하고 문서·revision·요청 ID를 연결한다. 실패나 충돌 시 이전 revision과 현재 포인터를 보존하고 성공 감사와 outbox를 추가하지 않는다. 응답을 받지 못한 클라이언트가 같은 기준 ID로 재전송하면 첫 저장이 커밋된 경우 충돌한다. 현재 원문을 다시 조회하여 결과를 확인할 수 있다.
 
@@ -42,7 +50,7 @@
 
 ### 게시된 원문 변경과 충돌 응답
 
-`FR-EDIT-002`와 `CAP-REVISION-COMMIT`의 P0 내부 시험은 공통 `PageApplicationService`에서 접근 권한을 검사한다. PostgreSQL에서는 문서 행을 잠근 뒤 현재 포인터를 읽어 편집 순서를 결정한다. 충돌하면 같은 문서에 속한 두 저장 리비전의 원문과 공개 여부를 읽고 잠금을 해제한 뒤, [저장 리비전 비교](#저장된-리비전-비교)와 동일한 한도로 차이를 계산한다. 누락·다른 문서·제한된 판과 비교 한도 초과에서는 부분 차이도 반환하지 않는다. 충돌과 비교 한도 초과로 현재 포인터·리비전·감사·outbox가 바뀌지 않는다.
+`FR-EDIT-002`와 `CAP-REVISION-COMMIT`의 P0 내부 시험은 공통 `PageApplicationService`에서 접근 권한을 검사한다. 두 DB에서는 문서 행을 잠근 뒤 현재 포인터를 읽어 편집 순서를 결정한다. 충돌하면 같은 문서에 속한 두 저장 리비전의 원문과 공개 여부를 읽고 잠금을 해제한 뒤, [저장 리비전 비교](#저장된-리비전-비교)와 동일한 한도로 차이를 계산한다. 누락·다른 문서·제한된 판과 비교 한도 초과에서는 부분 차이도 반환하지 않는다. 충돌과 비교 한도 초과로 현재 포인터·리비전·감사·outbox가 바뀌지 않는다.
 
 | 표면 | 충돌 응답 |
 |---|---|
@@ -58,7 +66,7 @@ REST PUT 409의 게시판 diff는 Wikidiff2 1.10 이상에서 차이를 제공�
 
 `PageApplicationService`에서 공통 읽기 정책을 적용한 뒤 문서 이력과 단일 리비전을 조회한다. 사이트 읽기 금지 시 기존 문서·리비전과 존재하지 않는 ID에 동일한 접근 거부를 반환하며, 제목·원문·요약·작성자·해시·페이지네이션 정보가 응답에 드러나지 않아야 한다. 두 API 계열의 읽기 응답과 오류에 `Cache-Control: no-store`를 적용한다. 리비전 본문 제한은 이력의 공개 메타데이터를 유지하면서 익명 사용자의 원문 접근을 차단한다. 이력 응답은 제한된 본문의 크기를 생략하고, 변경 전후 어느 쪽이든 본문이 제한되면 크기 차이를 `null`로 표시한다.
 
-이력은 저장한 UTC 시각의 역순으로 정렬한다. 같은 시각이면 숫자 리비전 ID의 역순으로 정렬한다. 각 페이지는 크기 제한을 적용하고, 정렬 경계와 소속 문서를 함께 검사한다. 다음 페이지에서 이전에 본 항목을 다시 반환하지 않으며, 정렬 경계보다 최신인 리비전이 추가되어도 더 오래된 페이지로 이어서 탐색한다. PostgreSQL 17 구현은 요청 시작 시 읽은 현재 포인터를 리비전 범위의 상한으로 사용한다. 문서 ID, 시각, 숫자 리비전 ID로 탐색하며 이력 조회 결과에 원문 전체를 포함하지 않는다. 단일 리비전은 고유 ID로 조회한다. 읽기는 현재 포인터·리비전·성공 감사·outbox를 변경하지 않는다.
+이력은 저장한 UTC 시각의 역순으로 정렬한다. 같은 시각이면 숫자 리비전 ID의 역순으로 정렬한다. 각 페이지는 크기 제한을 적용하고, 정렬 경계와 소속 문서를 함께 검사한다. 다음 페이지에서 이전에 본 항목을 다시 반환하지 않으며, 정렬 경계보다 최신인 리비전이 추가되어도 더 오래된 페이지로 이어서 탐색한다. PostgreSQL 17·MariaDB 11.8 구현은 요청 시작 시 읽은 현재 포인터를 리비전 범위의 상한으로 사용한다. 문서 ID, 시각, 숫자 리비전 ID의 복합 인덱스로 범위를 탐색하며 이력 조회 결과에 원문 전체를 포함하지 않는다. MariaDB의 커서 조건은 시각 비교와 동일 시각의 숫자 ID 비교로 펼쳐 범위 인덱스를 사용할 수 있게 한다. PostgreSQL은 튜플 비교를 사용한다. 단일 리비전은 고유 ID로 조회한다. 읽기는 현재 포인터·리비전·성공 감사·outbox를 변경하지 않는다.
 
 ### Native RESTful과 웹
 
@@ -86,7 +94,7 @@ REST PUT 409의 게시판 diff는 Wikidiff2 1.10 이상에서 차이를 제공�
 
 ## 저장된 리비전 비교
 
-`FR-EDIT-005`의 `CAP-REVISION-COMPARE`는 P0 내부 시험에서 같은 일반 이름공간 문서에 저장된 Wikitext의 main 슬롯 두 판을 비교한다. `PageApplicationService`는 조회 전에 공통 읽기 정책을 적용한다. PostgreSQL에서는 두 ID와 본문 가시성을 한 SQL 문에서 읽고, DB 연결을 반납한 뒤 비교한다. `wiki_revision_source_restriction`의 별도 레코드가 있으면 내부 운영자만 해당 본문을 읽거나 비교할 수 있다. 현재판과 과거판 원문 조회에도 같은 제한을 적용하며 리비전 원본은 불변이다. 누락된 판과 다른 문서의 판은 거부한다. 비교 중 문서의 현재 포인터, 리비전, 가시성, 감사 및 outbox를 변경하지 않는다. 읽기와 오류에는 `Cache-Control: no-store`를 적용한다.
+`FR-EDIT-005`의 `CAP-REVISION-COMPARE`는 P0 내부 시험에서 같은 일반 이름공간 문서에 저장된 Wikitext의 main 슬롯 두 판을 비교한다. `PageApplicationService`는 조회 전에 공통 읽기 정책을 적용한다. 두 DB에서는 두 ID와 본문 가시성을 한 SQL 문에서 읽고, DB 연결을 반납한 뒤 비교한다. `wiki_revision_source_restriction`의 별도 레코드가 있으면 내부 운영자만 해당 본문을 읽거나 비교할 수 있다. 현재판과 과거판 원문 조회에도 같은 제한을 적용하며 리비전 원본은 불변이다. 누락된 판과 다른 문서의 판은 거부한다. 비교 중 문서의 현재 포인터, 리비전, 가시성, 감사 및 outbox를 변경하지 않는다. 읽기와 오류에는 `Cache-Control: no-store`를 적용한다.
 
 웹 이력에서는 페이지를 넘겨 기준판과 대상판을 선택할 수 있다. 비교는 선택한 방향의 순서로 줄 번호와 추가·삭제·변경을 표시하고, 바뀐 부분은 줄 안에서 강조한다. 표·틀·HTML처럼 보이는 문자열도 Wikitext 원문으로 표시한다. 동일 ID 또는 내용이 같은 두 판은 차이가 없는 것으로 표시한다. Native 비교는 LF로 줄을 나누고 CR 및 끝의 빈 줄을 유지한다. 인라인 비교 단위는 Unicode 코드포인트다.
 
@@ -102,7 +110,7 @@ REST PUT 409의 게시판 diff는 Wikidiff2 1.10 이상에서 차이를 제공�
 
 - 비교 `compat_gap`은 Action 교차 문서, 제목·페이지 ID·상대 리비전·임시 원문·슬롯 지정, `inline`/`unified` 및 추가 메타데이터, 입력 검증·경고·캐시의 전체 응답 계약이다. MediaWiki에서는 Action이 교차 문서를 허용하고 REST가 거부한다.
 - Wikidiff2의 줄 대응·단어 단위 강조·이동 문단(종류 4/5)·일부 제목과 줄바꿈 경계는 추가 차등 검증 대상이다. 본문 제한의 관리 API·UI, 작성자와 요약의 개별 숨김, 리비전 억제 권한, 누락과 숨김이 동시에 발생할 때 Action의 오류 우선순위는 후속 범위다.
-- 비교 시험은 PostgreSQL 17의 UUID·숫자 ID 매핑, 권한·누락·소속·크기 오류, 문서·리비전·감사·outbox 보존, Native 스키마와 브라우저 이력 탐색을 검증한다. MariaDB 11.8, SQL Server 2022, Oracle 19c는 두 판의 Unicode 원문·가시성 및 상태 동등성 검증이 남아 있다. 공개 API 호환성 상태는 `INCOMPLETE`다.
+- 비교 시험은 PostgreSQL 17·MariaDB 11.8의 UUID·숫자 ID 매핑, 권한·누락·소속·크기 오류, 문서·리비전·감사·outbox 보존, Native 스키마와 브라우저 이력 탐색을 검증한다. SQL Server 2022, Oracle 19c는 저장 어댑터 구현과 두 판의 Unicode 원문·가시성 및 상태 동등성 검증이 남아 있다. 공개 API 호환성 상태는 `INCOMPLETE`다.
 
 ## 후속 편집을 보존하는 단일 편집 취소
 
@@ -118,21 +126,21 @@ REST PUT 409의 게시판 diff는 Wikidiff2 1.10 이상에서 차이를 제공�
 | MediaWiki Action 폼 `POST /w/api.php` | `action=edit`, `title` 또는 숫자 `pageid`, `undo`(양의 숫자 리비전 ID), CSRF `token`, 선택 `baserevid`(최신 기준판 숫자 ID) 및 `summary`. 제공된 `text`보다 서버에서 계산한 취소 원문을 우선한다. 성공은 `edit.result=Success`, `oldrevid`, `newrevid`. 최초 판·누락은 `nosuchrevid`, 다른 문서의 공개 판은 `revwrongpage`, 본문 제한은 `missingcontent`, 쓰기 정책 거부는 `permissiondenied`, 기준판 변경은 `editconflict`를 HTTP 200 오류로 반환한다. 겹치거나 모호한 역적용 및 병합 한도 초과는 `undofailure`다. [Action Edit](https://www.mediawiki.org/wiki/API:Edit) |
 | MediaWiki REST | 공식 참조에 독립적인 Undo 경로가 없다. `PUT /w/rest.php/v1/page/{title}`는 클라이언트가 보내는 원문으로 문서를 편집하는 경로다. [REST API Reference](https://www.mediawiki.org/wiki/API:REST_API/Reference) |
 
-시험 계약은 최신·과거 편집 취소와 후속 원문 보존, 겹침·모호한 위치 거부, 최초 판·교차 문서·누락·본문 제한·쓰기 정책 거부를 포함한다. 같은 최신 기준판을 지정한 편집·취소 요청은 한 건만 커밋되어야 한다. PostgreSQL 17에서 새 리비전·감사·outbox의 원자성과 실패 전후 상태를 검증하고 Native 응답을 OpenAPI와 대조한다. 브라우저에서 과거 편집 선택, 원문·이력 갱신, 충돌과 작성 중인 초안 보존을 검증한다. MediaWiki 1.46.2 고정 기준 서버에서 Action 성공·충돌을 차등 시험한다. 취소 차등 시험은 저장된 부모·대상·최신 원문이 양 서버에서 동일함을 먼저 확인한다. 입력 저장 정규화 차이를 취소 병합 차이로 혼동하지 않으며 출력 정규화로 숨기지 않는다.
+시험 계약은 최신·과거 편집 취소와 후속 원문 보존, 겹침·모호한 위치 거부, 최초 판·교차 문서·누락·본문 제한·쓰기 정책 거부를 포함한다. 같은 최신 기준판을 지정한 편집·취소 요청은 한 건만 커밋되어야 한다. PostgreSQL 17·MariaDB 11.8에서 새 리비전·감사·outbox의 원자성과 실패 전후 상태를 검증하고 Native 응답을 OpenAPI와 대조한다. 브라우저에서 과거 편집 선택, 원문·이력 갱신, 충돌과 작성 중인 초안 보존을 검증한다. MediaWiki 1.46.2 고정 기준 서버에서 Action 성공·충돌을 차등 시험한다. 취소 차등 시험은 저장된 부모·대상·최신 원문이 양 서버에서 동일함을 먼저 확인한다. 입력 저장 정규화 차이를 취소 병합 차이로 혼동하지 않으며 출력 정규화로 숨기지 않는다.
 
-`compat_gap`에는 Action 저장 시 끝 공백·줄바꿈 정규화(LibertyWiki는 원문 보존), 줄 내부 병합, 반복 문맥·인접 변경의 정밀 병합, `undoafter` 구간 취소, 병합 한도·무변경 응답(`nochange`), MediaWiki가 병합 가능한 오래된 `baserevid`를 허용하는 경우에도 현재 기준판과의 엄격한 일치를 요구하는 차이, 기준판 변경과 병합 실패가 동시에 발생한 경우를 포함한 오류 우선순위, 편집 요약·태그·주시 목록·인증과 권한의 전체 계약이 포함된다. 연속 편집 롤백은 [이슈 #16](https://github.com/fregmented/LibertyWiki/issues/16)에서 추적한다. MariaDB 11.8, SQL Server 2022, Oracle 19c의 동시성·가시성·원자성 검증이 남아 있다. 공개 API 호환성 상태는 `INCOMPLETE`다. [Manual: Reverts](https://www.mediawiki.org/wiki/Manual:Reverts), [ADR-0201](../../docs/adr/0201-relational-database-portability.md)
+`compat_gap`에는 Action 저장 시 끝 공백·줄바꿈 정규화(LibertyWiki는 원문 보존), 줄 내부 병합, 반복 문맥·인접 변경의 정밀 병합, `undoafter` 구간 취소, 병합 한도·무변경 응답(`nochange`), MediaWiki가 병합 가능한 오래된 `baserevid`를 허용하는 경우에도 현재 기준판과의 엄격한 일치를 요구하는 차이, 기준판 변경과 병합 실패가 동시에 발생한 경우를 포함한 오류 우선순위, 편집 요약·태그·주시 목록·인증과 권한의 전체 계약이 포함된다. 연속 편집 롤백은 [이슈 #16](https://github.com/fregmented/LibertyWiki/issues/16)에서 추적한다. SQL Server 2022, Oracle 19c의 저장 어댑터 구현과 동시성·가시성·원자성 검증이 남아 있다. 공개 API 호환성 상태는 `INCOMPLETE`다. [Manual: Reverts](https://www.mediawiki.org/wiki/Manual:Reverts), [ADR-0201](../../docs/adr/0201-relational-database-portability.md)
 
 ## 시험 계약과 compat_gap
 
-- PostgreSQL 17에서 공개 HTTP 경계로 세 생성 경로의 성공, 제목 및 ID 조회, 입력 오류, 없는 문서, 익명 정책 거부, 동시 중복 생성을 시험한다. 문서·revision·감사·outbox의 식별자 및 행 수를 비교한다. 런타임이 제공하는 Native 성공·오류 응답을 OpenAPI 스키마와 대조한다. 웹은 같은 Native 계약을 사용하며 HTML이 포함된 원문도 텍스트로 표시한다.
+- PostgreSQL 17·MariaDB 11.8에서 공개 HTTP 경계로 세 생성 경로의 성공, 제목 및 ID 조회, 입력 오류, 없는 문서, 익명 정책 거부, 동시 중복 생성을 시험한다. 문서·revision·감사·outbox의 식별자 및 행 수를 비교한다. 런타임이 제공하는 Native 성공·오류 응답을 OpenAPI 스키마와 대조한다. 웹은 같은 Native 계약을 사용하며 HTML이 포함된 원문도 텍스트로 표시한다.
 - 버전을 확인한 MediaWiki 1.46.2 시험 인스턴스에서 Action과 REST의 생성·조회·누락·중복 계약 중 비교 가능한 필드를 검증한다. 사이트 설정에서 파생된 ID·시각·라이선스 값과 감사 형식은 직접 일치 대상으로 삼지 않는다.
 - 편집 시험은 세 경로 각각에서 정상 저장, 이전 revision 보존, 부모와 현재 포인터, 권한과 유효성 오류, 같은 기준 ID로 경쟁하는 요청 중 한 건만 성공하는지 확인한다. 성공 감사·outbox에는 문서·revision·요청 ID가 일치해야 하며 거부된 요청으로 저장 상태가 바뀌면 안 된다. Native 응답은 OpenAPI와 대조하고, 웹은 충돌 후 편집 원문 보존을 확인한다. MediaWiki 차등 시험은 정상 업데이트와 충돌 등 기준 인스턴스에서 관찰할 수 있는 계약을 비교한다.
 - 이력 시험은 생성과 연속 편집 후 세 공개 경로에서 같은 리비전 순서와 지원하는 부모 관계, 원문 및 요약을 확인한다. 페이지 경계, 마지막 페이지, 새 편집 후 계속 조회, 누락 ID, 잘못되거나 다른 문서에 속하는 페이지네이션 기준, 읽기 거부 및 운영자 조회를 시험한다. 거부 응답에 원문·제목·요약·링크가 없어야 하며, 조회 전후 문서 현재 포인터와 리비전·감사·outbox가 같아야 한다. Native 성공·오류 응답은 OpenAPI와 비교한다. 웹은 더 오래된 이력, 읽기 전용 이전 원문과 편집 입력 보존을 확인한다. 차등 시험은 1.46.2에서 관찰한 Action 계속 토큰·숫자 ID 조회와 REST 이력 링크·단일 리비전 원문·상태를 비교한다.
 - compat_gap: MediaWiki의 쿠키·로그인/OAuth, 세션별 CSRF, 정확한 권한·오류 우선순위 및 모든 REST 오류 본문, HTTP 캐시·조건부 요청, 콘텐츠 필터 및 저장 전 치환, 자동 편집 요약, 로케일·이름공간·전체 제목 문법, 복수 제목·revision 조회 옵션, 전체 Action 전송/출력 변형, REST PUT 생성은 별도 계약과 차등 검증이 필요하다.
 - 편집 compat_gap에는 오래된 기준의 자동 병합, REST 오류 번역 메시지, 동일 원문 저장 시 Action `nochange` 및 REST 응답·부작용, 편집 요약 `comment: null`, 기준 ID를 생략한 Action 편집, 부분 편집과 타임스탬프·소규모 편집·주시 목록 옵션이 포함된다. 보호, 차단, 행위 필터, 미리보기와 Native ETag 조건부 저장은 제품 요구사항으로 추적한다.
 - 이력 compat_gap에는 가져온 리비전의 시각·ID 경계 검증, 다중 ID·다중 원문·슬롯·필터와 전체 메타데이터, Action의 오래된 순 정렬·포맷·계속 토큰 변형, REST 필터·캐시·조건부 요청, 전체 제목 정규화·넘겨주기, 이전 ID 이관, 삭제·필드별 숨김·억제 권한과 오류 표현이 포함된다. 시험 환경 작성자는 익명/운영자 두 역할로 표현한다. 렌더링·메타데이터 전용 REST 경로와 이전 URL 호환은 별도 기능으로 추적한다.
-- 첫 구현은 PostgreSQL 17을 사용한다. MariaDB 11.8, SQL Server 2022, Oracle 19c에서 스키마 이행, 동시 편집 직렬화와 충돌 시점 공개판 선택, 이전 revision 보존, 비교 제한, 실패 롤백 및 감사·outbox 원자성을 검증해야 한다. 구현 상태는 `INCOMPLETE`이며 GA 출시 게이트에는 이 검증, 호환성 차이 해소와 Wikitext 렌더링이 포함된다.
-- 이력과 이전 원문의 DB 검증은 위 세 DBMS에서도 기존 문서·리비전의 ID 매핑 보존, 안정적인 정렬과 경계 조회, 동시 편집 중 페이지 탐색, UTC 및 Unicode 원문 보존, 읽기 권한과 상태 동등성, 제한된 범위 조회 계획을 요구한다. [ADR-0201](../../docs/adr/0201-relational-database-portability.md).
+- 현재 내부 시험 범위는 PostgreSQL 17·MariaDB 11.8이다. SQL Server 2022·Oracle 19c에서는 저장 어댑터를 구현하고 스키마 이행, 동시 편집 직렬화와 충돌 시점 공개판 선택, 이전 revision 보존, 비교 제한, 실패 롤백 및 감사·outbox 원자성을 검증해야 한다. 구현 상태는 `INCOMPLETE`이며 GA 출시 게이트에는 이 검증, 호환성 차이 해소와 Wikitext 렌더링이 포함된다.
+- 이력과 이전 원문의 DB 검증은 SQL Server·Oracle에서도 기존 문서·리비전의 ID 매핑 보존, 안정적인 정렬과 경계 조회, 동시 편집 중 페이지 탐색, UTC 및 Unicode 원문 보존, 읽기 권한과 상태 동등성, 제한된 범위 조회 계획을 요구한다. [ADR-0201](../../docs/adr/0201-relational-database-portability.md).
 
 편집 작업의 범위는 [설계 #4](https://github.com/fregmented/LibertyWiki/issues/4), [구현 #5](https://github.com/fregmented/LibertyWiki/issues/5), [기능 검증 #6](https://github.com/fregmented/LibertyWiki/issues/6)에서 추적한다.
 

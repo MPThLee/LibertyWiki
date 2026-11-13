@@ -1,6 +1,6 @@
 # LibertyWiki
 
-MediaWiki 1.46.2의 코어·기본 배포 확장 기능을 독립 구현하는 AGPL-3.0-only 위키 프로젝트입니다. PostgreSQL 기반의 [내부 시험용 문서 생성·원문 편집·이력 및 원문 조회](wiki_design/source/15_PAGE_SOURCE_SLICE.md)를 실행할 수 있습니다. 제품 스킨은 라이트·다크 모드를 지원하는 [Liberty와 여백](wiki_design/source/03_EXTENSION_PARITY.md#3-제품-스킨-2종)으로 계획되어 있습니다. 정식 호환성과 출시 기준은 설계 문서에서 정의합니다.
+MediaWiki 1.46.2의 코어·기본 배포 확장 기능을 독립 구현하는 AGPL-3.0-only 위키 프로젝트입니다. PostgreSQL·MariaDB 기반의 [내부 시험용 문서 생성·원문 편집·이력 및 원문 조회](wiki_design/source/15_PAGE_SOURCE_SLICE.md)를 실행할 수 있습니다. 제품 스킨은 라이트·다크 모드를 지원하는 [Liberty와 여백](wiki_design/source/03_EXTENSION_PARITY.md#3-제품-스킨-2종)으로 계획되어 있습니다. 정식 호환성과 출시 기준은 설계 문서에서 정의합니다.
 
 현재 설계는 [문서 안내](wiki_design/source/00_README.md)에서 시작합니다. [제품 기획](wiki_design/source/01_PRODUCT_PLAN.md), [요구사항](wiki_design/source/02_REQUIREMENTS.md), [두 API 계약](wiki_design/source/14_DUAL_API_CONTRACT.md), [아키텍처](wiki_design/source/04_ARCHITECTURE.md), [결정 기록](docs/adr/), [용어집](GLOSSARY.md)을 순서대로 참고합니다.
 
@@ -12,7 +12,7 @@ LibertyWiki 실행물과 Docker 이미지는 ARM64·x86-64를 지원하도록 �
 
 ## 내부 시험 환경 실행
 
-JDK 21, Node.js 22.12 이상 및 UTF-8 PostgreSQL 17 데이터베이스를 준비합니다. 초기 테이블은 Flyway가 생성합니다. 아래 명령에서 연결 정보와 운영자 토큰을 시험 환경 값으로 바꿉니다.
+JDK 21, Node.js 22.12 이상 및 UTF-8 PostgreSQL 17 또는 MariaDB 11.8 데이터베이스를 준비합니다. 초기 테이블은 Flyway가 생성합니다. 아래 명령에서 연결 정보와 운영자 토큰을 시험 환경 값으로 바꿉니다.
 
 ```bash
 npm ci --prefix web
@@ -23,6 +23,8 @@ export WIKI_DB_PASSWORD='test-database-password'
 export WIKI_HTTP_OPERATOR_TOKEN='replace-with-a-random-local-token'
 ./gradlew bootRun
 ```
+
+MariaDB를 선택할 때는 DB를 `utf8mb4` 문자 집합으로 생성하고 `WIKI_DB_URL=jdbc:mariadb://127.0.0.1:3306/libertywiki`를 사용합니다. JDBC URL에 따라 드라이버와 Flyway 마이그레이션을 선택합니다. 현재 문서 기능의 지원 엔진은 PostgreSQL 17과 MariaDB 11.8이며, Oracle MySQL·SQL Server·Oracle Database용 어댑터는 포함하지 않습니다. 제품 전체의 네 DB 지원 요구는 [ADR-0201](docs/adr/0201-relational-database-portability.md)에 남아 있습니다.
 
 [http://127.0.0.1:8080](http://127.0.0.1:8080)에서 운영자 토큰을 입력해 문서를 생성하거나 제목으로 조회한 뒤 원문을 편집합니다. 문서 화면의 이력에서 이전 리비전의 원문을 열거나, 부모가 있는 편집을 선택해 겹치지 않는 후속 변경을 유지하며 해당 편집을 취소할 수 있습니다. 충돌이 발생하면 작성 중인 원문과 요약을 유지한 상태에서 최신 문서를 확인할 수 있습니다. 기본값은 루프백 바인딩, 익명 읽기 허용, 익명 편집·생성 거부입니다. 내부 시험 정책은 `WIKI_ANONYMOUS_READ`, `WIKI_ANONYMOUS_EDIT`, `WIKI_ANONYMOUS_CREATE`로 설정합니다. 익명 편집에는 읽기와 편집을, 익명 생성에는 세 가지 정책을 모두 `true`로 설정해야 합니다. Windows PowerShell에서는 `export KEY=value` 대신 `$env:KEY = 'value'`, `./gradlew` 대신 `.\gradlew.bat`를 사용합니다.
 
@@ -69,7 +71,9 @@ npm exec --prefix web -- playwright install chromium
 nix develop --command bash scripts/verify-development-environment.sh
 ```
 
-Linux에서는 Playwright의 호스트 라이브러리도 필요합니다(`playwright install --with-deps chromium`). [개발 환경 CI](.github/workflows/development-environment.yml)는 같은 스크립트를 Linux·macOS의 ARM64·x86-64 네이티브 러너에서 실행합니다. MediaWiki 차등 시험은 별도 기준 서버의 `WIKI_MW_BASE_URL`을 지정했을 때 추가로 실행합니다. 이 검증 범위는 현재 PostgreSQL 문서 기능이며, 다른 DB 구현이나 전체 MediaWiki 호환성을 인증하지 않습니다.
+Linux에서는 Playwright의 호스트 라이브러리도 필요합니다(`playwright install --with-deps chromium`). [개발 환경 CI](.github/workflows/development-environment.yml)는 같은 스크립트를 Linux·macOS의 ARM64·x86-64 네이티브 러너에서 실행합니다. MediaWiki 차등 시험은 별도 기준 서버의 `WIKI_MW_BASE_URL`을 지정했을 때 추가로 실행합니다. 이 워크플로는 PostgreSQL 문서 기능을 검증하며 전체 MediaWiki 호환성을 인증하지 않습니다. [MariaDB CI](.github/workflows/mariadb-storage.yml)는 별도의 MariaDB 11.8 실행·시험 DB로 Linux ARM64·x86-64에서 같은 빌드·계약·브라우저 검증을 수행합니다.
+
+MariaDB에서 전체 스크립트를 실행하려면 `WIKI_VERIFY_DB_ENGINE=mariadb`와 `WIKI_DB_URL/USER/PASSWORD`, `WIKI_TEST_DB_URL/USER/PASSWORD`를 지정합니다. 실행 DB와 시험 DB는 서로 다른 카탈로그여야 하며 모두 폐기 가능한 개발용 DB를 사용합니다. MariaDB 시험은 같은 카탈로그의 동시 시험 실행을 잠금으로 거부하지만 일반 앱의 접근을 차단하지는 않습니다. 스크립트는 외부 MariaDB를 종료하거나 삭제하지 않습니다.
 
 개발 도구는 애플리케이션 의존성이나 배포 이미지에 추가하지 않습니다. Nixpkgs는 MIT, Node.js는 MIT, PostgreSQL은 PostgreSQL License이며 JDK는 배포물의 GPLv2 및 예외·제3자 고지를 따릅니다. 도구를 재배포할 때는 고정된 실제 배포물의 라이선스와 공급망 검토가 별도로 필요합니다.
 
@@ -83,7 +87,9 @@ export WIKI_TEST_DB_PASSWORD='test-database-password'
 ./gradlew postgresTest
 ```
 
-`postgresTest`와 `mediaWikiTest`는 실행마다 임의의 PostgreSQL 스키마를 생성합니다. 스키마 생성 권한이 있는 계정과 폐기 가능한 시험 DB를 지정합니다. 차등 시험은 영어 첫 글자 대문자 규칙과 익명 읽기·편집·생성을 허용하는 별도의 MediaWiki 1.46.2 시험 인스턴스에 문서를 생성하고 편집합니다. 반복 실행에 필요한 편집 요청 한도는 시험 인스턴스의 [요청 한도 설정](https://www.mediawiki.org/wiki/Manual:$wgRateLimits)에서 조정합니다.
+`postgresTest`와 PostgreSQL에서 실행하는 `mediaWikiTest`는 실행마다 임의의 PostgreSQL 스키마를 생성합니다. 스키마 생성 권한이 있는 계정과 폐기 가능한 시험 DB를 지정합니다. MariaDB에서도 같은 공개 HTTP 계약을 `mariaDbTest`로 실행합니다. 다른 앱에서 사용하지 않는 전용 폐기 가능 MariaDB 시험 DB의 `jdbc:mariadb:` URL과 자격 증명을 `WIKI_TEST_DB_URL`, `WIKI_TEST_DB_USER`, `WIKI_TEST_DB_PASSWORD`에 지정합니다. `postgresTest`와 `mariaDbTest`는 각각 해당 엔진의 JDBC URL을 요구합니다.
+
+차등 시험은 영어 첫 글자 대문자 규칙과 익명 읽기·편집·생성을 허용하는 별도의 MediaWiki 1.46.2 시험 인스턴스에 문서를 생성하고 편집합니다. 반복 실행에 필요한 편집 요청 한도는 시험 인스턴스의 [요청 한도 설정](https://www.mediawiki.org/wiki/Manual:$wgRateLimits)에서 조정합니다.
 
 ```bash
 export WIKI_MW_BASE_URL=http://127.0.0.1:18763
@@ -102,4 +108,6 @@ npm test --prefix web
 
 설치된 Chrome을 사용하는 경우 `WIKI_BROWSER_CHANNEL=chrome`을 지정합니다. 이력 화면에서 기준판과 대상판을 선택해 저장된 Wikitext의 [리비전 비교](wiki_design/source/15_PAGE_SOURCE_SLICE.md#저장된-리비전-비교)를 확인할 수 있습니다. 비교 차등 시험에는 MediaWiki 1.46.2와 Wikidiff2 1.14.2를 사용합니다. 시험 서버에서 `php --ri wikidiff2`로 설치 버전을 확인합니다.
 
-프로젝트 소스는 [AGPL-3.0-only](LICENSE)를 따릅니다. [Gradle Wrapper](https://gradle.org/release-checksums/)와 [Spring Boot](https://github.com/spring-projects/spring-boot/blob/main/LICENSE.txt), [Kotlin](https://github.com/JetBrains/kotlin/blob/master/license/LICENSE.txt)은 Apache-2.0, [PostgreSQL JDBC](https://github.com/pgjdbc/pgjdbc/blob/master/LICENSE)는 BSD-2-Clause, [React](https://github.com/facebook/react/blob/main/LICENSE)와 [Vite](https://github.com/vitejs/vite/blob/main/LICENSE)는 MIT 라이선스입니다.
+프로젝트 소스는 [AGPL-3.0-only](LICENSE)를 따릅니다. [Gradle Wrapper](https://gradle.org/release-checksums/)와 [Spring Boot](https://github.com/spring-projects/spring-boot/blob/main/LICENSE.txt), [Kotlin](https://github.com/JetBrains/kotlin/blob/master/license/LICENSE.txt)은 Apache-2.0, [PostgreSQL JDBC](https://github.com/pgjdbc/pgjdbc/blob/master/LICENSE)는 BSD-2-Clause, [MariaDB Connector/J](https://github.com/mariadb-corporation/mariadb-connector-j/blob/3.5.8/LICENSE)는 LGPL-2.1-or-later, [Flyway](https://github.com/flyway/flyway/blob/flyway-11.7.2/LICENSE.txt)는 Apache-2.0, [React](https://github.com/facebook/react/blob/main/LICENSE)와 [Vite](https://github.com/vitejs/vite/blob/main/LICENSE)는 MIT 라이선스입니다.
+
+MariaDB Connector/J를 포함한 실행물을 배포할 때는 LGPL 라이선스·저작권 고지, 해당 라이브러리 소스 제공 및 교체·재결합에 관한 의무를 검토해야 합니다. 개발용 시험 통과는 배포용 SBOM·취약점·라이선스 검토를 대신하지 않습니다.

@@ -17,11 +17,25 @@ import wiki.liberty.domain.RevisionMetadata
 import wiki.liberty.domain.RevisionPage
 import wiki.liberty.domain.RevisionSource
 import java.sql.ResultSet
+import java.time.Instant
+import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.util.UUID
+import javax.sql.DataSource
 
 @Repository
-class PostgresPages(private val jdbc: JdbcTemplate) : PageRepository {
+class JdbcPages(private val jdbc: JdbcTemplate, dataSource: DataSource) : PageRepository {
+    private val maria = dataSource.connection.use {
+        when (val engine = it.metaData.databaseProductName) {
+            "MariaDB" -> true
+            "PostgreSQL" -> false
+            else -> error("Unsupported database engine: $engine")
+        }
+    }
+    private fun databaseValue(value: Any?): Any? = if (maria && value is UUID) value.toString() else value
+    private fun uuid(row: ResultSet, name: String): UUID? = row.getString(name)?.let(UUID::fromString)
+    private fun time(value: Instant): Any = if (maria) LocalDateTime.ofInstant(value, ZoneOffset.UTC) else value.atOffset(ZoneOffset.UTC)
+    private fun instant(row: ResultSet): Instant = if (maria) row.getObject("created_at", LocalDateTime::class.java).toInstant(ZoneOffset.UTC) else row.getTimestamp("created_at").toInstant()
     override fun findByTitle(title: PageTitle) = find("p.namespace_id = 0 AND p.normalized_title = ?", title.value)
     override fun findById(id: PageLookup.Id) = find("p.id = ?", id.value)
     override fun findByCompatId(id: PageLookup.CompatId) = find("p.compat_id = ?", id.value)
@@ -31,7 +45,7 @@ class PostgresPages(private val jdbc: JdbcTemplate) : PageRepository {
         return jdbc.query(
             "SELECT p.id, p.compat_id, p.normalized_title, p.current_revision_id FROM wiki_page p WHERE $condition",
             { row, _ -> revisionPage(row) },
-            key,
+            databaseValue(key),
         ).singleOrNull()
     }
 
@@ -39,7 +53,7 @@ class PostgresPages(private val jdbc: JdbcTemplate) : PageRepository {
         val (condition, key) = pageKey(lookup)
         val id = jdbc.query(
             "SELECT p.id FROM wiki_page p WHERE $condition FOR UPDATE",
-            { row, _ -> row.getObject("id", UUID::class.java) }, key,
+            { row, _ -> checkNotNull(uuid(row, "id")) }, databaseValue(key),
         ).singleOrNull() ?: return null
         // Read the committed revision and visibility after acquiring the page lock.
         return findById(PageLookup.Id(id))
@@ -61,7 +75,7 @@ class PostgresPages(private val jdbc: JdbcTemplate) : PageRepository {
             WHERE r.$column = ?
             """.trimIndent(),
             { row, _ -> RevisionSource(revisionPage(row), metadata(row), row.getString("source")) },
-            key,
+            databaseValue(key),
         ).singleOrNull()
     }
 
@@ -76,7 +90,7 @@ class PostgresPages(private val jdbc: JdbcTemplate) : PageRepository {
             WHERE r.$fromColumn = ? OR r.$toColumn = ?
             """.trimIndent(),
             { row, _ -> RevisionSource(revisionPage(row), metadata(row), row.getString("source")) },
-            fromKey, toKey,
+            databaseValue(fromKey), databaseValue(toKey),
         )
         fun select(lookup: RevisionLookup) = revisions.singleOrNull {
             when (lookup) {
@@ -92,7 +106,7 @@ class PostgresPages(private val jdbc: JdbcTemplate) : PageRepository {
         return jdbc.query(
             "SELECT $revisionColumns FROM wiki_revision r $parentJoin WHERE $historyScope AND r.$column = ?",
             { row, _ -> metadata(row) },
-            page.id, page.currentRevisionId, key,
+            databaseValue(page.id), databaseValue(page.currentRevisionId), databaseValue(key),
         ).singleOrNull()
     }
 
@@ -100,10 +114,23 @@ class PostgresPages(private val jdbc: JdbcTemplate) : PageRepository {
         val older = window.direction == HistoryDirection.OLDER
         val order = if (older) "DESC" else "ASC"
         val operator = (if (older) "<" else ">") + if (window.inclusive) "=" else ""
-        val bound = if (window.anchor == null) "" else "AND (r.created_at, r.compat_id) $operator (?, ?)"
-        val arguments = listOfNotNull<Any>(
-            page.id, page.currentRevisionId, window.anchor?.createdAt?.atOffset(ZoneOffset.UTC), window.anchor?.compatId, count,
-        )
+        val anchor = window.anchor
+        val bound = when {
+            anchor == null -> ""
+            maria -> {
+                val strict = if (older) "<" else ">"
+                "AND (r.created_at $strict ? OR (r.created_at = ? AND r.compat_id $operator ?))"
+            }
+            else -> "AND (r.created_at, r.compat_id) $operator (?, ?)"
+        }
+        val arguments = mutableListOf<Any>(checkNotNull(databaseValue(page.id)), checkNotNull(databaseValue(page.currentRevisionId)))
+        if (anchor != null) {
+            val createdAt = time(anchor.createdAt)
+            arguments.add(createdAt)
+            if (maria) arguments.add(createdAt)
+            arguments.add(anchor.compatId)
+        }
+        arguments.add(count)
         return jdbc.query(
             """
             SELECT $revisionColumns FROM wiki_revision r
@@ -122,16 +149,16 @@ class PostgresPages(private val jdbc: JdbcTemplate) : PageRepository {
     }
 
     private fun revisionPage(row: ResultSet) = RevisionPage(
-        row.getObject("id", UUID::class.java), row.getLong("compat_id"),
+        checkNotNull(uuid(row, "id")), row.getLong("compat_id"),
         checkNotNull(PageTitle.parse(row.getString("normalized_title"))),
-        row.getObject("current_revision_id", UUID::class.java),
+        checkNotNull(uuid(row, "current_revision_id")),
     )
 
     private fun metadata(row: ResultSet) = RevisionMetadata(
-        row.getObject("revision_id", UUID::class.java), row.getLong("compat_revision_id"),
-        row.getObject("parent_revision_id", UUID::class.java),
+        checkNotNull(uuid(row, "revision_id")), row.getLong("compat_revision_id"),
+        uuid(row, "parent_revision_id"),
         row.getObject("compat_parent_id", Long::class.javaObjectType),
-        row.getTimestamp("created_at").toInstant(), row.getString("summary"), row.getString("actor"),
+        instant(row), row.getString("summary"), row.getString("actor"),
         row.getInt("source_size"), row.getObject("delta", Int::class.javaObjectType),
         row.getBoolean("source_restricted"), row.getBoolean("parent_source_restricted"),
     )
@@ -149,21 +176,34 @@ class PostgresPages(private val jdbc: JdbcTemplate) : PageRepository {
         """.trimIndent(),
         { row, _ ->
             Page(
-                row.getObject("id", UUID::class.java), row.getLong("compat_id"),
+                checkNotNull(uuid(row, "id")), row.getLong("compat_id"),
                 checkNotNull(PageTitle.parse(row.getString("normalized_title"))),
-                row.getObject("revision_id", UUID::class.java), row.getLong("compat_revision_id"),
-                row.getString("source"), row.getTimestamp("created_at").toInstant(),
+                checkNotNull(uuid(row, "revision_id")), row.getLong("compat_revision_id"),
+                row.getString("source"), instant(row),
                 row.getObject("compat_parent_id", Long::class.javaObjectType),
                 row.getBoolean("source_restricted"),
             )
         },
-        key,
+        databaseValue(key),
     ).singleOrNull()
 
     override fun create(page: FirstRevision): PageInsert {
         val pageId = UUID.randomUUID()
         val revisionId = UUID.randomUUID()
-        val compatId = jdbc.query(
+        val compatId = if (maria) {
+            val rows = jdbc.query(
+                """
+                INSERT INTO wiki_page (id, namespace_id, normalized_title, current_revision_id)
+                VALUES (?, 0, ?, NULL)
+                ON DUPLICATE KEY UPDATE id = id
+                RETURNING id, compat_id
+                """.trimIndent(),
+                { row, _ -> checkNotNull(uuid(row, "id")) to row.getLong("compat_id") },
+                databaseValue(pageId), page.title.value,
+            ).single()
+            if (rows.first != pageId) return PageInsert.DuplicateTitle
+            rows.second
+        } else jdbc.query(
             """
             INSERT INTO wiki_page (id, namespace_id, normalized_title, current_revision_id)
             VALUES (?, 0, ?, ?)
@@ -176,21 +216,23 @@ class PostgresPages(private val jdbc: JdbcTemplate) : PageRepository {
 
         val revision = page.revision
         val compatRevisionId = writeRevision(pageId, revisionId, null, revision, "page.created")
+        if (maria) check(jdbc.update("UPDATE wiki_page SET current_revision_id = ? WHERE id = ? AND current_revision_id IS NULL", databaseValue(revisionId), databaseValue(pageId)) == 1)
         return PageInsert.Created(Page(pageId, compatId, page.title, revisionId, compatRevisionId, revision.source, revision.createdAt))
     }
 
     override fun append(base: Page, revision: RevisionWrite): Page {
         val revisionId = UUID.randomUUID()
-        // The deferred foreign key permits claiming the head before inserting the revision.
+        val compatRevisionId = if (maria) writeRevision(base.id, revisionId, base.revisionId, revision, "revision.committed") else null
+        // PostgreSQL defers the foreign key; MariaDB requires the revision first.
         val updated = jdbc.update(
             "UPDATE wiki_page SET current_revision_id = ? WHERE id = ? AND current_revision_id = ?",
-            revisionId, base.id, base.revisionId,
+            databaseValue(revisionId), databaseValue(base.id), databaseValue(base.revisionId),
         )
         check(updated == 1) { "The locked page no longer has the expected current revision." }
-        val compatRevisionId = writeRevision(base.id, revisionId, base.revisionId, revision, "revision.committed")
+        val writtenId = compatRevisionId ?: writeRevision(base.id, revisionId, base.revisionId, revision, "revision.committed")
         return base.copy(
             revisionId = revisionId,
-            compatRevisionId = compatRevisionId,
+            compatRevisionId = writtenId,
             source = revision.source,
             createdAt = revision.createdAt,
             compatParentRevisionId = base.compatRevisionId,
@@ -201,7 +243,7 @@ class PostgresPages(private val jdbc: JdbcTemplate) : PageRepository {
     private fun writeRevision(
         pageId: UUID, revisionId: UUID, parentId: UUID?, revision: RevisionWrite, eventType: String,
     ): Long {
-        val createdAt = revision.createdAt.atOffset(ZoneOffset.UTC)
+        val createdAt = time(revision.createdAt)
         val actor = revision.actor.name.lowercase()
         val compatRevisionId = checkNotNull(jdbc.queryForObject(
             """
@@ -209,21 +251,21 @@ class PostgresPages(private val jdbc: JdbcTemplate) : PageRepository {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING compat_id
             """.trimIndent(),
             Long::class.javaObjectType,
-            revisionId, pageId, parentId, revision.source, revision.sha256, revision.summary, actor, createdAt,
+            databaseValue(revisionId), databaseValue(pageId), databaseValue(parentId), revision.source, revision.sha256, revision.summary, actor, createdAt,
         ))
         jdbc.update(
             """
             INSERT INTO wiki_audit (event_type, page_id, revision_id, actor, request_id, occurred_at)
             VALUES (?, ?, ?, ?, ?, ?)
             """.trimIndent(),
-            eventType, pageId, revisionId, actor, revision.requestId, createdAt,
+            eventType, databaseValue(pageId), databaseValue(revisionId), actor, databaseValue(revision.requestId), createdAt,
         )
         jdbc.update(
             """
             INSERT INTO wiki_outbox (event_type, page_id, revision_id, actor, request_id, occurred_at)
             VALUES (?, ?, ?, ?, ?, ?)
             """.trimIndent(),
-            eventType, pageId, revisionId, actor, revision.requestId, createdAt,
+            eventType, databaseValue(pageId), databaseValue(revisionId), actor, databaseValue(revision.requestId), createdAt,
         )
         return compatRevisionId
     }

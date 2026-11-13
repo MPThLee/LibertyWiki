@@ -16,19 +16,20 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
 import java.io.File
+import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.Callable
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
 
-@Tag("postgres")
+@Tag("database")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = [
     "wiki.pages.anonymous-read=false",
     "wiki.pages.anonymous-edit=true",
     "wiki.pages.anonymous-create=true",
     "wiki.http.operator-token=$operatorToken",
 ])
-class PagePostgresTest {
+class PageDatabaseTest {
     @LocalServerPort private var port: Int = 0
     @Autowired private lateinit var jdbc: JdbcTemplate
     private val http get() = ContractHttp("http://127.0.0.1:$port")
@@ -157,6 +158,52 @@ class PagePostgresTest {
         assertThat(conflict.json.has("diff")).isFalse()
         assertThat(http.restRead(title, operatorToken).json.at("/latest/id")).isEqualTo(updated.json.at("/latest/id"))
         assertThat(rowCounts()).isEqualTo(before)
+    }
+
+    @Test
+    fun `creation timestamp stays UTC and agrees across API surfaces`() {
+        val title = "Timestamp-${UUID.randomUUID()}"
+        val before = Instant.now()
+        val created = http.nativeCreate(title, "timestamp")
+        val after = Instant.now()
+        assertThat(created.status).isEqualTo(201)
+        val timestamp = Instant.parse(created.json["createdAt"].asText())
+        assertThat(timestamp).isBetween(before.minusSeconds(1), after.plusSeconds(1))
+        assertThat(Instant.parse(http.restRead(title, operatorToken).json.at("/latest/timestamp").asText()))
+            .isEqualTo(timestamp)
+        assertThat(Instant.parse(http.actionRead("titles" to title, operatorToken).json
+            .at("/query/pages/0/revisions/0/timestamp").asText())).isEqualTo(timestamp)
+    }
+
+    @Test
+    fun `UTF-8 size boundary and empty sources round trip across API surfaces`() {
+        for (content in listOf("", "🌱".repeat(262_144))) {
+            val title = "Boundary-${UUID.randomUUID()}"
+            val created = http.nativeCreate(title, content)
+            assertThat(created.status).isEqualTo(201)
+            val pageId = created.json["id"].asText()
+            assertThat(http.get("$native/$pageId", operatorToken).json["source"].asText()).isEqualTo(content)
+            assertThat(http.restRead(title, operatorToken).json["source"].asText()).isEqualTo(content)
+            assertThat(http.actionRead("titles" to title, operatorToken).json
+                .at("/query/pages/0/revisions/0/slots/main/content").asText()).isEqualTo(content)
+        }
+    }
+
+    @Test
+    fun `normalized titles retain case and accent distinctions after the first character`() {
+        val suffix = UUID.randomUUID().toString()
+        val titles = listOf("Boundary case $suffix", "Boundary Case $suffix", "Boundary café $suffix", "Boundary cafe $suffix")
+        val ids = titles.mapIndexed { index, title ->
+            val created = http.nativeCreate(title, "content-$index")
+            assertThat(created.status).isEqualTo(201)
+            created.json["id"].asText()
+        }
+        assertThat(ids.toSet()).hasSize(titles.size)
+        titles.forEachIndexed { index, title ->
+            assertThat(http.restRead(title.replace(' ', '_'), operatorToken).json["source"].asText())
+                .isEqualTo("content-$index")
+        }
+        assertThat(http.nativeCreate("boundary__cafe\u0301__$suffix", "duplicate").status).isEqualTo(409)
     }
 
     @Test
@@ -625,7 +672,7 @@ class PagePostgresTest {
         val existing = http.nativeCreate("Edit $title", source).json
         val path = "$native/${existing["id"].asText()}"
         val before = rowCounts()
-        jdbc.execute("ALTER TABLE wiki_outbox ADD CONSTRAINT contract_reject_outbox CHECK (false) NOT VALID")
+        rejectOutboxInserts("contract_reject_outbox")
         try {
             assertThat(http.nativeCreate(title, source).status).isEqualTo(500)
             assertThat(http.get("$native/by-title/${title.replace(' ', '_')}", operatorToken).status).isEqualTo(404)
@@ -636,7 +683,7 @@ class PagePostgresTest {
             assertThat(http.get(path, operatorToken).json).isEqualTo(existing)
             assertThat(rowCounts()).isEqualTo(before)
         } finally {
-            jdbc.execute("ALTER TABLE wiki_outbox DROP CONSTRAINT contract_reject_outbox")
+            allowOutboxInserts("contract_reject_outbox")
         }
     }
 
@@ -756,12 +803,12 @@ class PagePostgresTest {
         val badToken = http.actionUndo("title" to title, compatHead, operatorToken, token = "invalid")
         assertThat(badToken.json.at("/error/code").asText()).isEqualTo("badtoken")
 
-        jdbc.execute("ALTER TABLE wiki_outbox ADD CONSTRAINT contract_reject_undo_outbox CHECK (false) NOT VALID")
+        rejectOutboxInserts("contract_reject_undo_outbox")
         try {
             assertThat(undo(head).status).isEqualTo(500)
             assertThat(actionUndo(compatHead).status).isEqualTo(500)
         } finally {
-            jdbc.execute("ALTER TABLE wiki_outbox DROP CONSTRAINT contract_reject_undo_outbox")
+            allowOutboxInserts("contract_reject_undo_outbox")
         }
         assertThat(http.get(path, operatorToken).json).isEqualTo(edited)
         assertThat(rowCounts()).isEqualTo(before)
@@ -903,12 +950,12 @@ class PagePostgresTest {
         val latest = http.postJson("$path/revisions", mapOf("baseRevisionId" to target["currentRevisionId"].asText(),
             "source" to "A\nb\nc\nd\nE\n"), operatorToken).json
         val before = rowCounts()
-        jdbc.execute("ALTER TABLE wiki_outbox ADD CONSTRAINT contract_reject_history_undo CHECK (false) NOT VALID")
+        rejectOutboxInserts("contract_reject_history_undo")
         try {
             assertThat(http.postJson("$path/undos", mapOf("revisionId" to target["currentRevisionId"].asText()), operatorToken).status).isEqualTo(500)
             assertThat(http.actionUndo("title" to title, compatTarget, operatorToken).status).isEqualTo(500)
         } finally {
-            jdbc.execute("ALTER TABLE wiki_outbox DROP CONSTRAINT contract_reject_history_undo")
+            allowOutboxInserts("contract_reject_history_undo")
         }
         assertThat(http.get(path, operatorToken).json).isEqualTo(latest)
         assertThat(rowCounts()).isEqualTo(before)
@@ -971,6 +1018,22 @@ class PagePostgresTest {
         assertThat(row["published_at"]).isNull()
     }
 
+    private fun rejectOutboxInserts(name: String) {
+        if (jdbc.dataSource!!.connection.use { it.metaData.databaseProductName } == "MariaDB") {
+            jdbc.execute("CREATE TRIGGER $name BEFORE INSERT ON wiki_outbox FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'test outbox failure'")
+        } else {
+            jdbc.execute("ALTER TABLE wiki_outbox ADD CONSTRAINT $name CHECK (false) NOT VALID")
+        }
+    }
+
+    private fun allowOutboxInserts(name: String) {
+        if (jdbc.dataSource!!.connection.use { it.metaData.databaseProductName } == "MariaDB") {
+            jdbc.execute("DROP TRIGGER $name")
+        } else {
+            jdbc.execute("ALTER TABLE wiki_outbox DROP CONSTRAINT $name")
+        }
+    }
+
     private fun rowCounts() = listOf("wiki_page", "wiki_revision", "wiki_audit", "wiki_outbox").map { table ->
         checkNotNull(jdbc.queryForObject("SELECT count(*) FROM $table", Long::class.javaObjectType))
     }
@@ -1003,6 +1066,6 @@ class PagePostgresTest {
 
         @JvmStatic
         @DynamicPropertySource
-        fun database(properties: DynamicPropertyRegistry) = postgresProperties(properties)
+        fun database(properties: DynamicPropertyRegistry) = databaseProperties(properties)
     }
 }

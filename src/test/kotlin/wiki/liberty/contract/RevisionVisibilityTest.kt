@@ -12,7 +12,7 @@ import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
 import java.util.UUID
 
-@Tag("postgres")
+@Tag("database")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = [
     "wiki.pages.anonymous-read=true",
     "wiki.pages.anonymous-edit=true",
@@ -38,7 +38,7 @@ class RevisionVisibilityTest {
         val second = http.restRead(title).json.at("/latest/id").asLong()
         assertThat(first).isPositive()
         assertThat(second).isGreaterThan(first)
-        jdbc.update("INSERT INTO wiki_revision_source_restriction (revision_id) VALUES (?)", UUID.fromString(restricted))
+        jdbc.update("INSERT INTO wiki_revision_source_restriction (revision_id) VALUES (?)", databaseId(restricted))
         val before = counts()
 
         for ((from, to, side) in listOf(Triple(restricted, visible, "from"), Triple(visible, restricted, "to"))) {
@@ -89,7 +89,7 @@ class RevisionVisibilityTest {
         assertThat(hiddenAction.json.toString()).doesNotContain("Secret source", "Visible source", "Draft secret")
         assertThat(counts()).isEqualTo(before)
 
-        jdbc.update("INSERT INTO wiki_revision_source_restriction (revision_id) VALUES (?)", UUID.fromString(visible))
+        jdbc.update("INSERT INTO wiki_revision_source_restriction (revision_id) VALUES (?)", databaseId(visible))
         assertThat(http.get("/api/v1/pages/$pageId").status).isEqualTo(403)
         assertThat(http.restRead(title).status).isEqualTo(403)
         assertThat(http.postJson("/api/v1/pages/$pageId/revisions",
@@ -120,7 +120,7 @@ class RevisionVisibilityTest {
         val head = edited["currentRevisionId"].asText()
         val compat = http.restRead(title).json.at("/latest/id").asLong()
         fun restrict(id: String) = jdbc.update(
-            "INSERT INTO wiki_revision_source_restriction (revision_id) VALUES (?)", UUID.fromString(id),
+            "INSERT INTO wiki_revision_source_restriction (revision_id) VALUES (?)", databaseId(id),
         )
         fun denied(auth: String?) {
             val native = http.postJson("$path/undos", mapOf("revisionId" to head), auth)
@@ -140,7 +140,7 @@ class RevisionVisibilityTest {
         assertThat(counts()).isEqualTo(restrictedParentState)
         assertThat(http.get(path, operatorToken).json).isEqualTo(edited)
 
-        jdbc.update("DELETE FROM wiki_revision_source_restriction WHERE revision_id = ?", UUID.fromString(parent))
+        jdbc.update("DELETE FROM wiki_revision_source_restriction WHERE revision_id = ?", databaseId(parent))
         restrict(head)
         val restrictedHeadState = counts()
         denied(null)
@@ -166,7 +166,7 @@ class RevisionVisibilityTest {
         val head = http.postJson("$path/revisions", mapOf("baseRevisionId" to targetId,
             "source" to "ONE\ntwo\nthree\nfour\nFIVE"), operatorToken).json
         for (restricted in listOf(parent, targetId)) {
-            jdbc.update("INSERT INTO wiki_revision_source_restriction (revision_id) VALUES (?)", UUID.fromString(restricted))
+            jdbc.update("INSERT INTO wiki_revision_source_restriction (revision_id) VALUES (?)", databaseId(restricted))
             val before = counts()
             val native = http.postJson("$path/undos", mapOf("revisionId" to targetId))
             assertThat(native.status).isEqualTo(403)
@@ -175,7 +175,7 @@ class RevisionVisibilityTest {
             assertThat(action.json.at("/error/code").asText()).isEqualTo("missingcontent")
             assertThat(counts()).isEqualTo(before)
             assertThat(http.get(path, operatorToken).json).isEqualTo(head)
-            jdbc.update("DELETE FROM wiki_revision_source_restriction WHERE revision_id = ?", UUID.fromString(restricted))
+            jdbc.update("DELETE FROM wiki_revision_source_restriction WHERE revision_id = ?", databaseId(restricted))
         }
     }
 
@@ -193,7 +193,7 @@ class RevisionVisibilityTest {
             "source" to "ONE\ntwo\nthree\nfour\nSECRET\n"), operatorToken).json
         val headId = head["currentRevisionId"].asText()
         val compatHead = http.restRead(title, operatorToken).json.at("/latest/id").asLong()
-        jdbc.update("INSERT INTO wiki_revision_source_restriction (revision_id) VALUES (?)", UUID.fromString(headId))
+        jdbc.update("INSERT INTO wiki_revision_source_restriction (revision_id) VALUES (?)", databaseId(headId))
         val before = counts()
         for (explicitBase in listOf(false, true)) {
             val body = mutableMapOf("revisionId" to targetId)
@@ -223,7 +223,7 @@ class RevisionVisibilityTest {
             "source" to "ONE\ntwo\nthree\nfour\nSECRET\n"), operatorToken).json
         val headId = head["currentRevisionId"].asText()
         val compatHead = http.restRead(title).json.at("/latest/id").asLong()
-        jdbc.update("INSERT INTO wiki_revision_source_restriction (revision_id) VALUES (?)", UUID.fromString(headId))
+        jdbc.update("INSERT INTO wiki_revision_source_restriction (revision_id) VALUES (?)", databaseId(headId))
         val before = counts()
         val native = http.postJson("$path/undos", mapOf("revisionId" to target["currentRevisionId"].asText(),
             "baseRevisionId" to target["currentRevisionId"].asText()), operatorToken)
@@ -235,12 +235,15 @@ class RevisionVisibilityTest {
         assertThat(counts()).isEqualTo(before)
     }
 
+    private fun databaseId(id: String): Any =
+        if (jdbc.dataSource!!.connection.use { it.metaData.databaseProductName } == "MariaDB") id else UUID.fromString(id)
+
     private fun counts() = listOf("wiki_page", "wiki_revision", "wiki_audit", "wiki_outbox", "wiki_revision_source_restriction")
         .map { jdbc.queryForObject("SELECT count(*) FROM $it", Long::class.javaObjectType) }
 
     companion object {
         @JvmStatic
         @DynamicPropertySource
-        fun database(properties: DynamicPropertyRegistry) = postgresProperties(properties)
+        fun database(properties: DynamicPropertyRegistry) = databaseProperties(properties)
     }
 }

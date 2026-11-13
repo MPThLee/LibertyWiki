@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: MariaDB storage
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: MariaDB storage (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    services:
+      mariadb:
+        image: mariadb:11.8@sha256:d36f18d65a0459510b8b0f643b226a6d299e3206486e2b64ff20754a6d291707
+        env:
+          MARIADB_ROOT_PASSWORD: disposable-ci-password
+          MARIADB_ROOT_HOST: '%'
+        ports:
+          - 3306/tcp
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31.11.5
+      - name: Create disposable catalogs
+        run: >-
+          docker exec "${{ job.services.mariadb.id }}"
+          mariadb --user=root --password=disposable-ci-password
+          -e 'CREATE DATABASE libertywiki CHARACTER SET utf8mb4; CREATE DATABASE libertywiki_test CHARACTER SET utf8mb4;'
+      - name: Install browser and host dependencies
+        run: |
+          npm ci --prefix web
+          npm exec --prefix web -- playwright install --with-deps chromium
+      - name: Verify build and runtime
+        env:
+          WIKI_VERIFY_DB_ENGINE: mariadb
+          WIKI_DB_URL: jdbc:mariadb://127.0.0.1:${{ job.services.mariadb.ports[3306] }}/libertywiki
+          WIKI_DB_USER: root
+          WIKI_DB_PASSWORD: disposable-ci-password
+          WIKI_TEST_DB_URL: jdbc:mariadb://127.0.0.1:${{ job.services.mariadb.ports[3306] }}/libertywiki_test
+          WIKI_TEST_DB_USER: root
+          WIKI_TEST_DB_PASSWORD: disposable-ci-password
+        run: nix develop --command bash scripts/verify-development-environment.sh

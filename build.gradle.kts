@@ -18,6 +18,8 @@ dependencies {
     implementation("org.flywaydb:flyway-core")
     runtimeOnly("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql")
+    runtimeOnly("org.mariadb.jdbc:mariadb-java-client")
+    runtimeOnly("org.flywaydb:flyway-mysql")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("com.networknt:json-schema-validator:1.5.9")
     testImplementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml")
@@ -29,7 +31,7 @@ tasks.processResources {
 }
 
 tasks.test {
-    useJUnitPlatform { excludeTags("postgres", "mediawiki") }
+    useJUnitPlatform { excludeTags("database", "mediawiki") }
 }
 
 fun registerContractTest(taskName: String, tag: String) = tasks.register<Test>(taskName) {
@@ -37,12 +39,25 @@ fun registerContractTest(taskName: String, tag: String) = tasks.register<Test>(t
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
     useJUnitPlatform { includeTags(tag) }
+    maxParallelForks = 1
+    systemProperty("junit.jupiter.execution.parallel.enabled", "false")
     doNotTrackState("The contract test depends on a live test instance.")
     shouldRunAfter(tasks.test)
 }
 
-registerContractTest("postgresTest", "postgres")
+registerContractTest("postgresTest", "database")
+registerContractTest("mariaDbTest", "database")
 registerContractTest("mediaWikiTest", "mediawiki")
+
+listOf("postgresTest" to "jdbc:postgresql:", "mariaDbTest" to "jdbc:mariadb:").forEach { (task, prefix) ->
+    tasks.named<Test>(task) {
+        doFirst {
+            check(System.getenv("WIKI_TEST_DB_URL")?.startsWith(prefix) == true) {
+                "$task requires WIKI_TEST_DB_URL to start with $prefix and point to a disposable database."
+            }
+        }
+    }
+}
 
 tasks.bootJar {
     doFirst {

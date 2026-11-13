@@ -10,19 +10,60 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
+import java.sql.Connection
+import java.sql.DriverManager
+import java.security.MessageDigest
 import java.util.UUID
+import java.util.Properties
 
 internal const val operatorToken = "test-only-operator-token"
 internal const val csrfToken = "+\\"
 internal const val revisionFields = "ids|timestamp|content|contentmodel"
 
-internal fun postgresProperties(properties: DynamicPropertyRegistry) {
-    val url = checkNotNull(System.getenv("WIKI_TEST_DB_URL")) { "Set WIKI_TEST_DB_URL to a disposable PostgreSQL 17 database." }
+internal fun databaseProperties(properties: DynamicPropertyRegistry) {
+    val url = checkNotNull(System.getenv("WIKI_TEST_DB_URL")) { "Set WIKI_TEST_DB_URL to a disposable PostgreSQL 17 or MariaDB 11.8 database." }
     val schema = "page_contract_" + UUID.randomUUID().toString().replace("-", "")
-    properties.add("spring.datasource.url") { url + (if ('?' in url) "&" else "?") + "currentSchema=$schema" }
-    properties.add("spring.flyway.schemas") { schema }
+    if (url.startsWith("jdbc:mariadb:")) {
+        MariaDbContractLock.acquire(url)
+        properties.add("spring.datasource.url") { url }
+    } else {
+        properties.add("spring.datasource.url") { url + (if ('?' in url) "&" else "?") + "currentSchema=$schema" }
+        properties.add("spring.flyway.schemas") { schema }
+    }
     properties.add("spring.datasource.username") { System.getenv("WIKI_TEST_DB_USER") ?: "libertywiki" }
     properties.add("spring.datasource.password") { System.getenv("WIKI_TEST_DB_PASSWORD") ?: "" }
+}
+
+// MariaDB contexts share the supplied disposable catalog. Hold a server-side lock for
+// the JVM lifetime so another contract run cannot alter its data concurrently.
+private object MariaDbContractLock {
+    private var connection: Connection? = null
+
+    @Synchronized
+    fun acquire(url: String) {
+        if (connection != null) return
+        val connectionProperties = Properties().apply {
+            setProperty("user", System.getenv("WIKI_TEST_DB_USER") ?: "libertywiki")
+            setProperty("password", System.getenv("WIKI_TEST_DB_PASSWORD") ?: "")
+            setProperty("connectTimeout", "3000")
+            setProperty("socketTimeout", "10000")
+        }
+        val candidate = DriverManager.getConnection(url, connectionProperties)
+        try {
+            val acquired = candidate.prepareStatement("SELECT GET_LOCK(?, 0)").use { statement ->
+                val catalogHash = MessageDigest.getInstance("SHA-256").digest(candidate.catalog.toByteArray())
+                    .joinToString("") { "%02x".format(it) }.take(40)
+                statement.setString(1, "libertywiki-contract-$catalogHash")
+                statement.executeQuery().use { result -> result.next() && result.getInt(1) == 1 }
+            }
+            check(acquired) { "MariaDB contract tests require an exclusive disposable database." }
+            connection = candidate
+            Runtime.getRuntime().addShutdownHook(Thread { candidate.close() })
+        } catch (error: Throwable) {
+            candidate.close()
+            throw error
+        }
+    }
 }
 
 internal class ContractHttp(private val base: String, private val scriptPath: String = "/w") {

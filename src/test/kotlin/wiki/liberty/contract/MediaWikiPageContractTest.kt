@@ -533,6 +533,6 @@ class MediaWikiPageContractTest {
     companion object {
         @JvmStatic
         @DynamicPropertySource
-        fun database(properties: DynamicPropertyRegistry) = postgresProperties(properties)
+        fun database(properties: DynamicPropertyRegistry) = databaseProperties(properties)
     }
 }

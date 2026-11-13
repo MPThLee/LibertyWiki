@@ -12,7 +12,7 @@ import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
 import java.util.UUID
 
-@Tag("postgres")
+@Tag("database")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = [
     "wiki.pages.anonymous-read=true",
     "wiki.pages.anonymous-edit=true",
@@ -50,11 +50,11 @@ class PageWritePolicyTest {
     companion object {
         @JvmStatic
         @DynamicPropertySource
-        fun database(properties: DynamicPropertyRegistry) = postgresProperties(properties)
+        fun database(properties: DynamicPropertyRegistry) = databaseProperties(properties)
     }
 }
 
-@Tag("postgres")
+@Tag("database")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = [
     "wiki.pages.anonymous-read=true",
     "wiki.pages.anonymous-edit=false",
@@ -112,6 +112,6 @@ class PageEditDeniedTest {
     companion object {
         @JvmStatic
         @DynamicPropertySource
-        fun database(properties: DynamicPropertyRegistry) = postgresProperties(properties)
+        fun database(properties: DynamicPropertyRegistry) = databaseProperties(properties)
     }
 }

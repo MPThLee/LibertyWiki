@@ -11,10 +11,9 @@ spring:
     password: ${WIKI_DB_PASSWORD:}
     hikari:
       connection-timeout: 3000
-      data-source-properties:
-        connectTimeout: 3
-        socketTimeout: 10
-        options: "-c statement_timeout=5000 -c lock_timeout=4000"
+      transaction-isolation: TRANSACTION_READ_COMMITTED
+  flyway:
+    locations: classpath:db/{vendor}
   jdbc:
     template:
       query-timeout: 5s
